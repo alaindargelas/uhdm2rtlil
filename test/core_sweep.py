@@ -1561,6 +1561,10 @@ def _pass_cell(out, cycles_txt=None):
         cycles_txt = m.group(1) if m else None
     if cycles_txt is None:
         return "✅ PASS"
+    # 0 active cycles: the RTL never changed an output, so nothing was
+    # compared.  Not a pass (netlist_cosim.py reports it as RTL_INERT).
+    if act and int(act.group(1)) == 0:
+        return "— (RTL outputs never change: nothing compared)"
     return f"✅ PASS ({cycles_txt} cycles, {act.group(1) if act else '?'} active)"
 
 

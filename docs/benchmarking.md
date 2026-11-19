@@ -40,31 +40,31 @@ line and in the total:
 | **Ibex** | 28 | 22 | 24 | 21 | 0 | 3 | 25 | 21 | 0 | 4 | 0 |
 | **rp32 (R5P)** | 13 | 5 | 5 | 2 | 0 | 3 | 6 | 2 | 0 | 4 | 0 |
 | **fx68k** | 22 | 19 | 13 | 7 | 0 | 6 | 12 | 8 | 0 | 4 | 0 |
-| **Syntacore SCR1** | 37 | 29 | 37 | 37 | 0 | 0 | 37 | 37 | 0 | 0 | 0 |
-| **RgGen** | 25 | 23 | 25 | 25 | 0 | 0 | 25 | 25 | 0 | 0 | 0 |
-| **VeeR EH1** | 67 | 54 | 66 | 66 | 0 | 0 | 66 | 66 | 0 | 0 | 0 |
-| **TNoC** | 43 | 18 | 12 | 12 | 0 | 0 | 12 | 12 | 0 | 0 | 0 |
-| **VeeR EL2** | 91 | 78 | 86 | 86 | 0 | 0 | 87 | 87 | 0 | 0 | 0 |
-| **VeeR EH2** | 100 | 81 | 96 | 94 | **2** | 0 | 96 | 95 | 0 | 1 | 0 |
+| **Syntacore SCR1** | 37 | 29 | 36 | 36 | 0 | 0 | 36 | 36 | 0 | 0 | 0 |
+| **RgGen** | 25 | 23 | 23 | 23 | 0 | 0 | 23 | 23 | 0 | 0 | 0 |
+| **VeeR EH1** | 67 | 54 | 62 | 62 | 0 | 0 | 62 | 62 | 0 | 0 | 0 |
+| **TNoC** | 43 | 18 | 9 | 9 | 0 | 0 | 9 | 9 | 0 | 0 | 0 |
+| **VeeR EL2** | 91 | 78 | 82 | 82 | 0 | 0 | 83 | 83 | 0 | 0 | 0 |
+| **VeeR EH2** | 100 | 81 | 94 | 92 | **2** | 0 | 94 | 93 | 0 | 1 | 0 |
 | **RSD** | 165 | 118 | 137 | 133 | **3** | 1 | 140 | 139 | 0 | 1 | 0 |
-| **BlackParrot** | 125 | 50 | 48 | 45 | **1** | 2 | 48 | 46 | 0 | 2 | 0 |
+| **BlackParrot** | 125 | 50 | 45 | 42 | **1** | 2 | 45 | 43 | 0 | 2 | 0 |
 | **OpenTitan** (upstream) | 32 | 28 | 29 | 28 | 0 | 1 | 29 | 28 | 0 | 1 | 0 |
-| **OpenTitan IP library** (upstream, the other 44 blocks) | 605 | 508 | 530 | 522 | **2** | 6 | 530 | 524 | **1** | 5 | 0 |
-| **Pavona** (300 modules + 100 chip instances) | 400 | 382 | 390 | 381 | 0 | 9 | 390 | 381 | 0 | 9 | 0 |
-| **Ariane CVA6** (142 modules + 138 core instantiations, the latter formal-only) | 280 | 228 | 135 | 128 | **1** | 6 | 135 | 129 | 0 | 6 | 0 |
-| **Ariane CVA6 flavours** (the three other sv-tests configurations: HPDcache, H-extension, RV32) | 429 | 304 | 402 | 374 | **8** | 20 | 402 | 382 | 0 | 20 | 0 |
+| **OpenTitan IP library** (upstream, the other 44 blocks) | 605 | 508 | 506 | 498 | **2** | 6 | 506 | 500 | **1** | 5 | 0 |
+| **Pavona** (300 modules + 100 chip instances) | 400 | 382 | 389 | 380 | 0 | 9 | 389 | 380 | 0 | 9 | 0 |
+| **Ariane CVA6** (142 modules + 138 core instantiations, the latter formal-only) | 280 | 228 | 133 | 126 | **1** | 6 | 133 | 127 | 0 | 6 | 0 |
+| **Ariane CVA6 flavours** (the three other sv-tests configurations: HPDcache, H-extension, RV32) | 429 | 304 | 396 | 368 | **8** | 20 | 396 | 376 | 0 | 20 | 0 |
 | **Caliptra** | 22 | 19 | 21 | 21 | 0 | 0 | 21 | 21 | 0 | 0 | 0 |
 | **XiangShan** (香山) | 21 | 18 | 21 | 21 | 0 | 0 | 21 | 21 | 0 | 0 | 0 |
-| **XiangShan core** (香山) | 2002 | 1608 | 1943 | 1940 | **3** | 0 | 1944 | 1944 | 0 | 0 | 0 |
-| **External IP** (the other 40 repos; the XiangShan library is the row above) | 6812 | 5551 | 5958 | 5872 | **37** | 49 | 6102 | 6010 | **9** | 83 | 0 |
-| **chipsalliance/sv-tests** | 708 | 17 | 11 | 11 | 0 | 0 | 11 | 11 | 0 | 0 | 0 |
-| **sv-synth-tests** (the converted sv-tests of `test/sv_tests`) | 434 | 419 | 405 | 395 | **1** | 9 | 415 | 405 | 0 | 10 | 0 |
-| **sv-yosys-issues** (the YosysHQ/yosys SystemVerilog-issue corpus of `test/yosys_issues`) | 212 | 151 | 155 | 146 | 0 | 9 | 182 | 167 | **1** | 14 | 0 |
+| **XiangShan core** (香山) | 2002 | 1608 | 1876 | 1873 | **3** | 0 | 1877 | 1877 | 0 | 0 | 0 |
+| **External IP** (the other 40 repos; the XiangShan library is the row above) | 6812 | 5551 | 5721 | 5635 | **37** | 49 | 5848 | 5756 | **9** | 83 | 0 |
+| **chipsalliance/sv-tests** | 708 | 17 | 10 | 10 | 0 | 0 | 10 | 10 | 0 | 0 | 0 |
+| **sv-synth-tests** (the converted sv-tests of `test/sv_tests`) | 434 | 419 | 401 | 391 | **1** | 9 | 411 | 401 | 0 | 10 | 0 |
+| **sv-yosys-issues** (the YosysHQ/yosys SystemVerilog-issue corpus of `test/yosys_issues`) | 212 | 151 | 150 | 141 | 0 | 9 | 177 | 162 | **1** | 14 | 0 |
 | **sv-elab-issues** (the povik/sv-elab issue corpus of `test/sv_elab_issues`) | 138 | 60 | 49 | 46 | **1** | 2 | 62 | 58 | 0 | 4 | 0 |
-| **slang-issues** (the MikePopoloski/slang synthesizable issue corpus of `test/slang_issues`) | 178 | 65 | 57 | 51 | **2** | 4 | 68 | 56 | **3** | 9 | 0 |
-| **All sweeps** (23 workflows) | **12989** | **9855** | **10655** | **10464** | **61** | **130** | **10866** | **10675** | **14** | **177** | **0** |
+| **slang-issues** (the MikePopoloski/slang synthesizable issue corpus of `test/slang_issues`) | 178 | 65 | 55 | 49 | **2** | 4 | 65 | 53 | **3** | 9 | 0 |
+| **All sweeps** (23 workflows) | **12989** | **9855** | **10287** | **10096** | **61** | **130** | **10480** | **10289** | **14** | **177** | **0** |
 
-**14 `read_uhdm` divergences** across 10866 co-simulated rows: 10675 pass
+**14 `read_uhdm` divergences** across 10480 co-simulated rows: 10289 pass
 outright and 177 are divergences a SAT miter proved to be simulation
 artefacts.  The 14:
 
@@ -86,7 +86,7 @@ their reasons in [slang_unsupported.md](slang_unsupported.md).
 The numbers are the **latest passing run of each of the 23 sweep workflows**,
 2026-11-13 to 2026-11-19, 83 family reports in `build/sweeps/_night1119`,
 counted by [`test/sweep_table.py`](../test/sweep_table.py): **12989 rows, 9855
-formally proven, `read_uhdm` 10675 co-sim passes, `read_slang` 10464**, 0
+formally proven, `read_uhdm` 10289 co-sim passes, `read_slang` 10096**, 0
 undriven.  Two reports come from an earlier run because their latest one is
 not a measurement: `cva6-chip` (CVA6's 138 core instantiations) from run
 43412896065 (2026-11-13) -- the 2026-11-19 run checked 0 instances, because
