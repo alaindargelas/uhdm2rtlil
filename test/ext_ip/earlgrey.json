@@ -1,0 +1,54 @@
+{
+  "title": "OpenTitan top_earlgrey (chip top, upstream)",
+  "url": "https://github.com/lowRISC/opentitan",
+  "_note": "The Earlgrey CHIP TOP, which the opentitan-ip family excludes because its scope is the IP library.  Same pin, roots, include path and flags as opentitan-ip (f49474bc, the commit caliptra-ss fetches); those roots name only top_earlgrey's own generated directories, so another top's `top_pkg` / `top_racl_pkg` (darjeeling TL_AUW=28 vs earlgrey 23) never enters the closure.  top_earlgrey is the row, not chip_earlgrey_asic: the chip wrapper needs the analog model and pad ring.  Its 89 ports are plain input / output of package struct types, so no flat shim is needed.  read_uhdm reads it in 5.3 GB.  Beyond opentitan-ip's roots it needs the Ibex core (vendor/lowrisc_ibex/rtl -- without it `ibex_pkg` is undefined and the import aborts on cross-module wire references), vendor/pulp_common_cells/rtl, and top_earlgrey/ip/: the top-generated crossbars (xbar_main, xbar_peri and their tl_*_pkg) and sensor_ctrl / ast_pkg; the closure takes only what top_earlgrey references, so the analog `ast` model itself is never pulled in.  hw/dv/sv/dv_utils is on the include path for Ibex's `dv_fcov_macros.svh` (compiled to nothing under SYNTHESIS).  read_timeout: the read takes ~15-17 min, above ext_flow's 900 s floor.",
+  "repos": [
+    {
+      "url": "https://github.com/lowRISC/opentitan.git",
+      "commit": "f49474bc89c3ce8a99536329a1e16bf22936da37",
+      "dir": "opentitan"
+    }
+  ],
+  "roots": [
+    "opentitan/hw/ip/*/rtl/*.sv",
+    "opentitan/hw/ip_templates/*/rtl/*.sv",
+    "opentitan/hw/top_earlgrey/ip_autogen/*/rtl/*.sv",
+    "opentitan/hw/top_earlgrey/rtl/*.sv",
+    "opentitan/hw/top_earlgrey/rtl/autogen/*.sv",
+    "opentitan/hw/vendor/pulp_riscv_dbg/src/*.sv",
+    "opentitan/hw/vendor/pulp_riscv_dbg/debug_rom/*.sv",
+    "opentitan/hw/vendor/pulp_common_cells/src/*.sv",
+    "opentitan/hw/top_earlgrey/rtl/autogen/testing/*.sv",
+    "opentitan/hw/top_earlgrey/ip/*/rtl/*.sv",
+    "opentitan/hw/top_earlgrey/ip/*/rtl/autogen/*.sv",
+    "opentitan/hw/vendor/lowrisc_ibex/rtl/*.sv",
+    "opentitan/hw/vendor/pulp_common_cells/rtl/*.sv"
+  ],
+  "incdirs": [
+    "opentitan/hw/ip/prim/rtl",
+    "opentitan/hw/ip/bkdr_loader/rtl",
+    "opentitan/hw/dv/sv/dv_utils"
+  ],
+  "defines": [
+    "SYNTHESIS"
+  ],
+  "slang_flags": [
+    "--single-unit",
+    "--relax-enum-conversions"
+  ],
+  "exclude_srcs": [
+    "opentitan/hw/ip/prim_asap7/",
+    "opentitan/hw/ip/prim_xilinx/",
+    "opentitan/hw/ip/prim_xilinx_ultrascale/",
+    "opentitan/hw/vendor/pulp_riscv_dbg/src/dmi_bscane_tap\\.sv$"
+  ],
+  "modules": [
+    {
+      "name": "top_earlgrey"
+    }
+  ],
+  "seq": 3,
+  "timeout": 600,
+  "want": "proven",
+  "read_timeout": 2700
+}

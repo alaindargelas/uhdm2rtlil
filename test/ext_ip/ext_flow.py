@@ -84,8 +84,13 @@ UNIT_IMPORTS = []
 SLANG_FLAGS = ""
 
 
+# A family's manifest may raise the floor ("read_timeout", seconds): earlgrey's
+# chip top reads 12 MB of source in ~15 min, right at the 900 s floor.
+READ_TIMEOUT = 0
+
+
 def _sl_timeout(src_bytes):
-    return max(900, min(4 * 3600, int(src_bytes / (1 << 20)) * 20))
+    return max(900, READ_TIMEOUT, min(4 * 3600, int(src_bytes / (1 << 20)) * 20))
 
 
 def sh(cmd, cwd=None, timeout=None, env=None):
@@ -1196,6 +1201,8 @@ def main():
     global MAX_CLOSURE_BYTES, ALWAYS_SRCS, SLANG_FLAGS, UNIT_IMPORTS
     UNIT_IMPORTS = list(man.get("unit_imports", []))
     SLANG_FLAGS = " ".join(man.get("slang_flags", []))
+    global READ_TIMEOUT
+    READ_TIMEOUT = int(man.get("read_timeout", 0))
     MAX_CLOSURE_BYTES = int(float(man.get("max_closure_mb", 0)) * (1 << 20))
     # "exclude_srcs" applies to always_srcs too, not just the roots: a family
     # that supplies a harness stand-in for one file of a GLOBBED library has to
