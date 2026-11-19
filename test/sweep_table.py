@@ -67,6 +67,7 @@ groups=[
  ('**BlackParrot**',['black-parrot'],'[black-parrot]('+W+'sweep-black-parrot.yml)'),
  ('**OpenTitan** (upstream)',['opentitan'],'[opentitan]('+W+'sweep-opentitan.yml)'),
  ('**OpenTitan IP library** (upstream, the other 44 blocks)',['opentitan-ip'],'[ext]('+W+'sweep-ext.yml)'),
+ ('**OpenTitan Earlgrey** (the `top_earlgrey` chip top)',['earlgrey'],'[earlgrey]('+W+'sweep-earlgrey.yml)'),
  ('**Pavona** (300 modules + 100 chip instances)',['acc','aes','csrng','edn','entropy_src','hmac','keymgr','kmac','pavona','periph','periph2','periph3','periph4','periph5','tlul','dragonfly','egret'],'[pavona]('+W+'sweep-pavona.yml)'),
  ('**Ariane CVA6** (142 modules + 138 core instantiations, the latter formal-only)',['cva6','cva6-chip'],'[cva6]('+W+'sweep-cva6.yml)'),
  ('**Ariane CVA6 flavours** (the three other sv-tests configurations: HPDcache, H-extension, RV32)',['cva6-hpdcache','cva6-hext','cva6-rv32'],'[cva6-flavours]('+W+'sweep-cva6-flavours.yml)'),

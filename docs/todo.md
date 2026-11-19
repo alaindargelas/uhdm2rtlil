@@ -10,8 +10,8 @@ recorded beside that family's numbers.
 
 ## Done — swept and supported
 
-61 designs: 42 external-IP families in `sweep-ext.yml` (manifests are
-`test/ext_ip/<name>.json`) and 19 with a workflow of their own.
+62 designs: 42 external-IP families in `sweep-ext.yml` (manifests are
+`test/ext_ip/<name>.json`) and 20 with a workflow of their own.
 
 | Design | Repo | Swept by |
 |---|---|---|
@@ -51,6 +51,7 @@ recorded beside that family's numbers.
 | OpenPiton | [PrincetonUniversity/openpiton](https://github.com/PrincetonUniversity/openpiton) | `openpiton.json` (`sweep-ext.yml`) |
 | OpenTitan (vendored blocks) | [lowRISC/opentitan](https://github.com/lowRISC/opentitan) | `sweep-opentitan.yml` |
 | OpenTitan IP blocks (upstream) | [lowRISC/opentitan.git](https://github.com/lowRISC/opentitan.git) | `opentitan-ip.json` (`sweep-ext.yml`) |
+| OpenTitan Earlgrey chip top (`top_earlgrey`) | [lowRISC/opentitan](https://github.com/lowRISC/opentitan) | `earlgrey.json` (`sweep-earlgrey.yml`) |
 | Pavona (OpenTitan fork) | [lowRISC/opentitan](https://github.com/lowRISC/opentitan) | `sweep-pavona.yml` |
 | PULP APB | [pulp-platform/apb](https://github.com/pulp-platform/apb) | `apb.json` (`sweep-ext.yml`) |
 | PULP AXI | [pulp-platform/axi](https://github.com/pulp-platform/axi) | `axi.json` (`sweep-ext.yml`) |
@@ -81,7 +82,6 @@ recorded beside that family's numbers.
 
 | Candidate | Repo | What it needs |
 |---|---|---|
-| **OpenTitan `top_earlgrey`** | [lowRISC/opentitan](https://github.com/lowRISC/opentitan) | **Reads and co-simulates three-way clean; not yet swept.**  `read_uhdm` reads the 574-file closure in 5.3 GB peak and ~15 min, which fits a 16 GB runner.  `opentitan-ip.json` excludes the chip top (that family's scope is the IP library), so it needs its own family: the `opentitan-ip` roots plus `top_earlgrey/ip/` (the generated `xbar_main` / `xbar_peri`, `sensor_ctrl`, `ast_pkg`).  Keep another top's `top_pkg` / `top_racl_pkg` out of the closure: they share a core leaf with earlgrey's and disagree (`TL_AUW` 23 vs 28).  No flat shim is needed (89 plain `input` / `output` ports of package struct types).  Surelog reports one elaboration error, `alert_handler_reg_pkg::AsyncOn`. |
 | **BlackParrot whole-core rows** | [black-parrot/black-parrot](https://github.com/black-parrot/black-parrot) | Twelve rows (`bp_processor`, `bp_unicore*`, `bp_core*`, `bp_multicore`, `bp_cacc_tile_node`) exceed the runner's 12 GB Surelog cap.  Measured and unresolved; the family's per-module rows are swept. |
 | **i3c-core (standalone)** | [chipsalliance/i3c-core](https://github.com/chipsalliance/i3c-core) | **Low priority — already measured twice**: caliptra-ss sweeps its vendored copy and the OpenTitan library its own `i3c_*` rows.  A standalone row set at upstream head adds only freshness. |
 | **NEORV32** | [stnolting/neorv32](https://github.com/stnolting/neorv32) | **Out of scope**: VHDL only, which a SystemVerilog frontend cannot read.  Listed so it is not asked about again. |
