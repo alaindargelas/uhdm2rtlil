@@ -71,7 +71,7 @@ artefacts.  The 14:
 | family | rows | status |
 |---|---|---|
 | Cheshire, CORE-V MCU, PULPissimo | 7 | rows `read_slang` cannot read, so there is no reference to adjudicate against: simulation models (`SimDTM`, `tcdm_model`, `obi_sim_mem`, `cam_vip`) and interface shims (`apbt1_interface`, `tcdm_interface`, `axi_rt_unit_top_xilinx`) |
-| OpenPiton | 2 | `l2_state` / `l2_state_wrap`, 1 and 4 cycles, `read_slang` clean; formally equivalent to depth 4, the divergence is deeper -- OPEN |
+| OpenPiton | 2 | `l2_state` / `l2_state_wrap`, 1 and 4 cycles, `read_slang` clean -- FIXED by #1626 (a reduction operand sized by its comparison's context); both rows re-measured equivalent with co-sim PASS, and drop out of this count at the next openpiton sweep |
 | OpenTitan IP library | 1 | `rstmgr_crash_info`, 202 cycles; `read_slang` cannot elaborate it -- OPEN |
 | sv-yosys-issues | 1 | issue #4574 (shareable memory ports), 161 cycles; `read_slang` cannot run it -- OPEN |
 | slang-issues | 3 | #1124 and #331 (`read_slang` cannot read them) and #1154 -- OPEN |
