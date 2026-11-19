@@ -177,7 +177,7 @@ EOF
   # always shape a memory the same way, so the truncation is asymmetric and
   # produced SEVEN spurious counterexamples (load_unit, store_unit,
   # std_nbdcache, ...).  The SRAM-heavy modules whose full-depth model no
-  # longer fits the 12 GB cap (cva6_icache, cva6_icache_axi_wrapper,
+  # longer fits the CI memory cap (cva6_icache, cva6_icache_axi_wrapper,
   # wt_dcache_mem -- their byte enables are all-ones since the `.be_i('1)`
   # fix) are recorded as `timeout` in cva6_modules.txt instead.
   # MEM_LIMIT_KB (CI): cap yosys's address space so a big-module SAT blowup
@@ -186,8 +186,11 @@ EOF
   # std_cache_subsystem, failing whole shards.  The kill surfaces as a
   # bad_alloc/signal exit, which the classifier below folds into `timeout`
   # (a budget outcome, not a crash) when the limit is active.
+  # `ulimit -c 0`: the kill aborts, and apport would otherwise capture a
+  # core of the whole capped address space -- gigabytes, on a VM already
+  # near its RAM limit.
   if [ -n "${MEM_LIMIT_KB:-}" ]; then
-    timeout -k 10 "$tmo" bash -c       "ulimit -Sv $MEM_LIMIT_KB; exec \"$YOSYS\" -m \"$PLUGIN\" miter.ys"       > miter.log 2>&1
+    timeout -k 10 "$tmo" bash -c       "ulimit -Sv $MEM_LIMIT_KB; ulimit -c 0; exec \"$YOSYS\" -m \"$PLUGIN\" miter.ys"       > miter.log 2>&1
   else
     timeout -k 10 "$tmo" "$YOSYS" -m "$PLUGIN" miter.ys > miter.log 2>&1
   fi
