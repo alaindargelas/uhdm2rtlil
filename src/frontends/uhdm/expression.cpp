@@ -10651,10 +10651,21 @@ RTLIL::SigSpec UhdmImporter::import_operation(const operation* uhdm_op, const UH
             // BEFORE the NOT, so the amount was 2^64-32+x and the aligned
             // RVC map came out 0 in every cycle (153 of 301 diverged); the
             // same leak made `x << (5'(a) + 5'h3)` shift by a 64-bit sum.
+            // A REDUCTION's operand is self-determined too (LRM Table
+            // 11-21): `|(~x)` inverts at x's own width whatever surrounds
+            // it.  Under a comparison's 32-bit context (the unsized `0` in
+            // `(|(~bist_index)) == 0`) the 8-bit index was extended BEFORE
+            // the NOT, so 24 inverted zeros made the reduction 1 for every
+            // value -- OpenPiton's bram_1r1w_wrapper never left its BIST
+            // init and every SRAM read came back 0 (l2_state,
+            // l2_state_wrap co-sim divergences).
             const bool self_det_rhs =
-                (op_type == vpiLShiftOp || op_type == vpiRShiftOp ||
-                 op_type == vpiArithLShiftOp || op_type == vpiArithRShiftOp ||
-                 op_type == vpiPowerOp) && operands.size() == 1;
+                ((op_type == vpiLShiftOp || op_type == vpiRShiftOp ||
+                  op_type == vpiArithLShiftOp || op_type == vpiArithRShiftOp ||
+                  op_type == vpiPowerOp) && operands.size() == 1) ||
+                op_type == vpiUnaryAndOp || op_type == vpiUnaryNandOp ||
+                op_type == vpiUnaryOrOp || op_type == vpiUnaryNorOp ||
+                op_type == vpiUnaryXorOp || op_type == vpiUnaryXNorOp;
             // The shifted VALUE (operand 0) is context-determined, and the
             // context is the widest of the assignment target and the
             // operand's own width (LRM 11.8.2) -- so `(out_size+1) >> 1`
