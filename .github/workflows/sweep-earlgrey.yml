@@ -1,0 +1,36 @@
+name: Sweep earlgrey
+
+# OpenTitan's Earlgrey CHIP TOP (`top_earlgrey`, lowRISC/opentitan @
+# f49474bc), one row: read_uhdm vs read_slang SAT miter from reset, the
+# opt-check, and the Verilator co-sim of both netlists against the RTL
+# (test/ext_ip/ext_flow.py via core_sweep.py, family `earlgrey`).  The
+# opentitan-ip family of sweep-ext.yml sweeps the IP library and excludes
+# the chip top.  Nightly + manual dispatch.
+
+on:
+  workflow_dispatch:
+    inputs:
+      cycles:
+        description: "Co-sim cycles"
+        required: false
+        default: "300"
+  schedule:
+    - cron: "17 6 2-30/2 * *"   # even days, 06:17 UTC, clear of the other sweeps
+
+concurrency:
+  group: sweep-earlgrey-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sweep:
+    uses: ./.github/workflows/core-sweep.yml
+    with:
+      core: earlgrey
+      cycles: ${{ github.event.inputs.cycles || '300' }}
+      # Measured locally (2026-11-19): 54 min end to end -- Surelog 6.1 GB,
+      # read_uhdm ~17 min, the miter 9.8 GB until its 600 s SAT budget, the
+      # Verilator build 6.1 GB.  One row, one job, so the 12 GB cap leaves
+      # the 16 GB runner its margin; 180 min covers a slower runner.
+      timeout: 180
+      jobs: "1"
+      mem_limit_kb: "12000000"
