@@ -51,7 +51,7 @@ def count(f):
 rep={}
 for f in glob.glob(os.path.join(root,'*','*-sweep-report','*.md')):
     rep[os.path.basename(f).replace('-sweep.md','')]=count(f)
-W='https://github.com/alainmarcel/uhdm2rtlil/actions/workflows/'
+W='https://github.com/chipsalliance/uhdm2rtlil/actions/workflows/'
 # One row per row of README's "Supported Core IP" table, same names, same order.
 groups=[
  ('**Ibex**',['ibex'],'[ibex]('+W+'sweep-ibex.yml)'),

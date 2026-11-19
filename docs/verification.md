@@ -31,7 +31,7 @@ report **0 Miter-Formal escapes** — no real UHDM≠Verilog difference slips th
 
 `make test-all --all` runs the internal SystemVerilog suite plus the upstream
 Yosys suite -- the same run as the sharded
-[Regression](https://github.com/alainmarcel/uhdm2rtlil/actions/workflows/regression-sharded.yml)
+[Regression](https://github.com/chipsalliance/uhdm2rtlil/actions/workflows/regression-sharded.yml)
 workflow (every PR + nightly); the developer run is
 `cd test && ./run_parallel.sh 6 --no-cva6` (the internal tests, ~24 min), and
 a PR lands only on a clean run.  The counts are the regression's own summary

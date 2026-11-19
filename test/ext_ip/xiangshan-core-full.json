@@ -13,7 +13,7 @@
   "",
   "The generator does not fit a hosted runner (40 GB JVM heap, 3.2 M lines),",
   "so the sweep fetches the generator's OUTPUT: the release asset",
-  "xiangshan-rtl-e4566c29 on alainmarcel/uhdm2rtlil holds build/rtl of",
+  "xiangshan-rtl-e4566c29 on chipsalliance/uhdm2rtlil holds build/rtl of",
   "`make verilog CONFIG=DefaultConfig` at XiangShan e4566c29 (firtool",
   "1.149.0), 2003 files.  To regenerate it locally use xiangshan-core-gen.json",
   "(`make xiangshan-core-full-gen`).",
@@ -35,7 +35,7 @@
    [
     "bash",
     "-c",
-    "mkdir -p XiangShan-rtl && curl -sSL https://github.com/alainmarcel/uhdm2rtlil/releases/download/xiangshan-rtl-e4566c29/xiangshan-DefaultConfig-e4566c29-rtl.tar.gz | tar -xz -C XiangShan-rtl"
+    "mkdir -p XiangShan-rtl && curl -sSL https://github.com/chipsalliance/uhdm2rtlil/releases/download/xiangshan-rtl-e4566c29/xiangshan-DefaultConfig-e4566c29-rtl.tar.gz | tar -xz -C XiangShan-rtl"
    ]
   ],
   "timeout": 1800

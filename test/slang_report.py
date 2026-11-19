@@ -30,7 +30,7 @@ from collections import Counter, defaultdict
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
-REPO = "https://github.com/alainmarcel/uhdm2rtlil/blob/main/"
+REPO = "https://github.com/chipsalliance/uhdm2rtlil/blob/main/"
 EXT_ROOT = os.environ.get("EXT_IP_ROOT", os.path.expanduser("~/ext"))
 
 # ---------------------------------------------------------------- classes
