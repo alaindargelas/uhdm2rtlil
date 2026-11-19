@@ -54,7 +54,13 @@ jobs:
 
     - name: Install dependencies
       run: |
-        sudo apt-get update
+        # Bounded + retried: one shard's `apt-get update` hung on the azure
+        # mirror for the job's whole 150-minute budget (#1617, shard 3).
+        for i in 1 2 3; do
+          sudo timeout 300 apt-get -o Acquire::Retries=3 \
+            -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update && break
+          echo "apt-get update attempt $i failed"; sleep 15
+        done
         sudo apt-get install -y \
           build-essential cmake git python3 python3-pip pkg-config \
           libssl-dev zlib1g-dev libtcmalloc-minimal4 uuid-dev tcl-dev \
@@ -148,7 +154,13 @@ jobs:
 
     - name: Install runtime dependencies
       run: |
-        sudo apt-get update
+        # Bounded + retried: one shard's `apt-get update` hung on the azure
+        # mirror for the job's whole 150-minute budget (#1617, shard 3).
+        for i in 1 2 3; do
+          sudo timeout 300 apt-get -o Acquire::Retries=3 \
+            -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update && break
+          echo "apt-get update attempt $i failed"; sleep 15
+        done
         # Runtime libs for the prebuilt binaries, plus what Verilator's
         # generated C++ and the suite's helpers need.
         # ccache is REQUIRED here even though the shard compiles nothing of
@@ -192,11 +204,15 @@ jobs:
     - name: Run shard ${{ matrix.shard }}/12
       run: |
         cd test
-        # MEM_LIMIT_KB: cap each CVA6 miter's yosys at ~12 GB so a SAT
-        # blowup kills yosys (classified as a budget timeout) instead of
-        # the 16 GB runner VM's agent — un-capped runs lost whole shards
-        # to "runner received a shutdown signal" mid-SAT.
-        MEM_LIMIT_KB=12000000 \
+        # MEM_LIMIT_KB: cap each CVA6 miter's yosys so a SAT blowup kills
+        # yosys (classified as a budget timeout) instead of the 16 GB runner
+        # VM's agent — un-capped runs lost whole shards to "runner received a
+        # shutdown signal" mid-SAT.  12 GB was still too much: wt_cache_subsystem
+        # reaches 10.1 GB RSS before its bad_alloc, and the VM died there (#1617,
+        # shard 8).  Every module expected `proven` peaks at <= 2.8 GB (bht2lvl);
+        # the ones above 8 GB (cva6_icache*, wt_cache_subsystem) are recorded
+        # as `timeout` already, so 8 GB changes no expected outcome.
+        MEM_LIMIT_KB=8000000 \
         JOBS=${{ github.event.inputs.jobs || 1 }} \
         RUN_SLANG_COSIM=${{ github.event.inputs.slang_cosim == 'true' && '1' || '0' }} \
         ./run_all_tests.sh --all \
