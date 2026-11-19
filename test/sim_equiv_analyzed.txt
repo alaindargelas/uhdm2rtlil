@@ -1226,3 +1226,23 @@ Test: real_cond
     read_uhdm truncates it to 0 and takes the false arm.  A genuine READER
     defect (Surelog hands over REAL:0.250000 intact), tracked in
     failing_tests.txt until fixed.
+Test: opt_share_cat
+    Upstream yosys test (tests/opt/opt_share_cat.v): `reg [31:0] cat1 =
+    {a+b, c+d};` is a variable declaration with a NON-constant initializer.
+    Yosys read_verilog -- and read_uhdm, which follows it -- treats that as a
+    continuous assignment, which is what the upstream opt_share test relies
+    on.  Verilator up to 5.048 did the same; 5.054 applies the LRM
+    (10.5 / 6.8: a declaration assignment initializes the variable ONCE), so
+    the RTL side holds cat1 / cat2 at their time-0 value and the middle 32
+    bits of `res` differ from cycle 0.  A deliberate Yosys-compatible reading,
+    not a frontend defect.
+
+Test: partsel
+    Upstream yosys test (tests/simple/partsel.v), partsel_test008:
+    `din[idx*8 - uoffset +: 8]` with idx = 0 and uoffset = 4.  The index
+    expression is UNSIGNED (idx and uoffset are unsigned, so `idx*8 -
+    uoffset` is 2^32-4), which puts the whole select out of range: read_uhdm
+    and read_slang both give xxxxxxxx (checked with `sat -enable_undef`).
+    Verilator 5.054 (unlike 5.048) and read_verilog read the base as -4 and
+    return {din[3:0], xxxx}.  An X-vs-value difference on an out-of-range
+    select, ~1 cycle in 200 per output; read_uhdm agrees with read_slang.
