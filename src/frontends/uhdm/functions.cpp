@@ -2829,9 +2829,25 @@ void UhdmImporter::scan_for_direct_return_assignment(const any* stmt, const std:
 std::vector<const UHDM::variables*> UhdmImporter::function_static_state_vars(const UHDM::function* f) {
     std::vector<const UHDM::variables*> out;
     if (!f || !f->VpiAutomatic() || !f->Variables() || !f->Stmt()) return out;
-    for (auto v : *f->Variables())
-        if (!v->VpiAutomatic() && function_body_writes_to(f->Stmt(), std::string(v->VpiName())))
+    for (auto v : *f->Variables()) {
+        // Surelog flags an automatic UNPACKED ARRAY local on its element
+        // variable, not on the array_var: `logic [1:0] sc[2];` in an
+        // automatic function has no vpiAutomatic of its own, exactly like
+        // `static logic [1:0] ks[2];`, and only the element (vpiReg) tells
+        // them apart.  Reading the array_var alone backed every array local
+        // of every automatic function with a static register (rggen's
+        // get_hw_next_value.set_clear), whose 0 init then conflicted with
+        // the X-initialised value the body actually computes.
+        bool automatic = v->VpiAutomatic();
+        if (!automatic && v->UhdmType() == uhdmarray_var) {
+            auto av = any_cast<const array_var*>(v);
+            if (av->Variables() && !av->Variables()->empty() &&
+                av->Variables()->front()->VpiAutomatic())
+                automatic = true;
+        }
+        if (!automatic && function_body_writes_to(f->Stmt(), std::string(v->VpiName())))
             out.push_back(v);
+    }
     return out;
 }
 
