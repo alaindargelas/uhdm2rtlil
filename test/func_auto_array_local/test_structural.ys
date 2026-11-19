@@ -1,0 +1,6 @@
+# The automatic array local `sc` must not be backed by a function-static
+# register (`\nxt.sc`); the static scalar `calls` must be (`\count.calls`).
+read_uhdm slpp_all/surelog.uhdm
+hierarchy -check -top dut
+select -assert-count 0 w:nxt.sc
+select -assert-count 1 w:count.calls
