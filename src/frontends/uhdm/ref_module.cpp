@@ -79,7 +79,7 @@ void UhdmImporter::import_ref_module(const ref_module* ref_mod) {
     // Mark as not-yet-elaborated so Yosys's hierarchy pass treats this the
     // same as the Verilog frontend's output (matches `module_not_derived`
     // attribute on cells whose target module hasn't been derived yet).
-    cell->attributes[RTLIL::escape_id("module_not_derived")] = RTLIL::Const(1);
+    cell->attributes[uid(RTLIL::escape_id("module_not_derived"))] = RTLIL::Const(1);
     
     // Import port connections from ref_module and infer parameter widths
     int inferred_width = 1; // default
@@ -104,7 +104,7 @@ void UhdmImporter::import_ref_module(const ref_module* ref_mod) {
                 RTLIL::Module* target_module = design->module(RTLIL::escape_id(module_name));
                 if (target_module) {
                     RTLIL::Wire* target_port = target_module->wire(RTLIL::escape_id(port_name));
-                    if (target_port && target_port->attributes.count(RTLIL::escape_id("interface_port"))) {
+                    if (target_port && target_port->attributes.count(uid(RTLIL::escape_id("interface_port")))) {
                         if (mode_debug)
                             uhdm_trace("    Skipping interface port connection: %s (marked as interface_port)\n", port_name.c_str());
                         continue;

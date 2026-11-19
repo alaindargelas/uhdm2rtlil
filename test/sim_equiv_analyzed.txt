@@ -1211,3 +1211,18 @@ Test: lrm_array_reduction_with
     always 0.  read_uhdm gives arr[1] ^ arr[3], the LRM value; s, c and o
     agree with Verilator.  read_slang cannot read the reduction methods.
     A Verilator artefact.
+
+Test: real_rtoi
+    Yosys 0.71 upstream test `assign a = $rtoi(1.0e20);` into a 32-bit
+    output.  1e20 is outside the integer range, which the LRM leaves
+    undefined (20.5 says only "truncating"): Verilator gives 0x80000000,
+    read_verilog the low 32 bits 1661992960, read_uhdm 0.  The co-sim compares
+    against Verilator's choice; no frontend is "right".  Listed in
+    failing_tests.txt for the same reason.
+
+Test: real_cond
+    Yosys 0.71 upstream test.  A REAL parameter used as a condition
+    (`Q = 0.25; a = Q ? 1 : 0; if (Q) ...`) must be TRUE (nonzero, LRM 12.4);
+    read_uhdm truncates it to 0 and takes the false arm.  A genuine READER
+    defect (Surelog hands over REAL:0.250000 intact), tracked in
+    failing_tests.txt until fixed.

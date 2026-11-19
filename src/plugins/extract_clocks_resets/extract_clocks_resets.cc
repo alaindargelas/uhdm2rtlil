@@ -57,7 +57,7 @@ struct ExtractClocksResetsPass : public Pass {
         std::set<RTLIL::IdString> clocks;
         std::map<RTLIL::IdString, bool> resets; // active-high?
 
-        auto cell_is_dff = [](RTLIL::IdString t) {
+        auto cell_is_dff = [design](RTLIL::IdString t) {
             // RTLIL-level FF cells
             if (t == ID($dff) || t == ID($dffe) ||
                 t == ID($adff) || t == ID($adffe) ||
@@ -68,7 +68,7 @@ struct ExtractClocksResetsPass : public Pass {
             // synthesised netlist has been written with `write_verilog`
             // and re-read, the cell type comes back as a *public*
             // identifier `\$_DFF_PP0_` etc. — match both.
-            std::string s = t.str();
+            std::string s = design->twines().str(t);
             auto match = [&](const std::string &pfx) {
                 return starts_with(s, pfx) || starts_with(s, "\\" + pfx);
             };
@@ -186,18 +186,18 @@ struct ExtractClocksResetsPass : public Pass {
             if (!(wire->port_input || wire->port_output)) continue;
             const char *dir = wire->port_input && wire->port_output ? "inout"
                               : wire->port_input ? "input" : "output";
-            f << "PORT " << RTLIL::unescape_id(wire->name) << " "
+            f << "PORT " << RTLIL::unescape_id(wire->name.str()) << " "
               << wire->width << " " << dir << "\n";
         }
         for (auto clk : clocks)
-            f << "CLOCK " << RTLIL::unescape_id(clk) << "\n";
+            f << "CLOCK " << RTLIL::unescape_id(design->twines().str(clk)) << "\n";
         for (auto &r : resets)
-            f << "RESET " << RTLIL::unescape_id(r.first) << " "
+            f << "RESET " << RTLIL::unescape_id(design->twines().str(r.first)) << " "
               << (r.second ? "1" : "0") << "\n";
         f.close();
 
         log("extract_clocks_resets: module=%s, ports=%d, clocks=%d, resets=%d -> %s\n",
-            log_id(top->name), (int)top->ports.size(),
+            top->name.unescape().c_str(), (int)top->ports.size(),
             (int)clocks.size(), (int)resets.size(), output_file.c_str());
     }
 } ExtractClocksResetsPass;

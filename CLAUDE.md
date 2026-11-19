@@ -6,14 +6,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is a Yosys frontend that converts SystemVerilog to RTLIL (Register Transfer Level Intermediate Language) via UHDM (Universal Hardware Data Model). The workflow is: SystemVerilog → Surelog → UHDM → UHDM Frontend → RTLIL → Yosys synthesis.
 
-The Yosys submodule is pinned at **YosysHQ tag v0.70 + one fork patch**
+The Yosys submodule is pinned at **YosysHQ tag v0.71 + one fork patch**
 (`third_party/yosys`, tracking alainmarcel/yosys branch
-`v0.70-proc-dlatch-memo`): the proc_dlatch memoization of the
+`v0.71-proc-dlatch-memo`): the proc_dlatch memoization of the
 find_mux_feedback/find_mux_constant DAG walks, which are exponential on
 shared mux subtrees without it (CVA6 cva6_tlb).  The patch is STILL not
-upstreamed as of v0.70 — when YosysHQ merges it, repoint `.gitmodules` to
+upstreamed as of v0.71 (proposed as YosysHQ/yosys#6521) — when YosysHQ merges it, repoint `.gitmodules` to
 https://github.com/YosysHQ/yosys.git.  **Rebasing it onto a new tag is a real
-merge, not a fast-forward:** v0.70 added `active_bits` cycle detection to the
+merge, not a fast-forward:** v0.70 added `active_bits` cycle detection (and v0.71 `$bwmux` handling) to the
 same two functions (`enter_mux_bit()` hard-errors on a logic loop, with
 `active_bits.erase()` on the way out), so keep BOTH — the memo lookup must stay
 BEFORE `enter_mux_bit` (a memo hit then neither skips the erase nor masks a real
@@ -56,6 +56,29 @@ top-level wrapper clears it.  v0.70 requires **C++20**
       yosys must depend on `${INSTALL_DIR}/bin/yosys`.
   0.68 → 0.69 removed nothing this project uses: coolrunner2/greenpak4
 synth, nlutmap, `abc -retime/-noabc9/-abc2`, `logger -stderr`.)
+
+**0.70 → 0.71 re-interned every identifier PER DESIGN** (kernel/twine.h,
+docs/source/yosys_internals/idstring.rst): an `IdString` is now an index into
+one Design's `TwinePool`, so it lost `str()` / `c_str()`, its `std::string`
+constructor, and `log_id()`; `ID(x)` accepts only names in
+`kernel/constids.inc`; `autoidx` is per design (`twines().next_autoidx()`);
+`new RTLIL::Memory` needs its module.  Object names (`wire->name`,
+`cell->type`) are `OwnedId` wrappers that still have `.str()` but not
+`.c_str()`, and `Module` / `Design` methods (`wire()`, `addWire()`, ...) still
+take strings.  The port (633 compile errors) goes through a small helper layer
+at the top of `uhdm2rtlil.h`: `uid(str)` interns into the design being
+imported, `ustr(id)` renders one, and `log_id(x)` is a macro with the old
+meaning.  `uhdm_id_design` is set by `UhdmImporter`'s constructor, which is
+sound because read_uhdm only ever imports into ONE design.  Two traps:
+  * `merge_memwr_syncs()` recovers SOURCE order by sorting processes on their
+    name's interning order.  That was `IdString::index_`; it is now
+    `name.ref().untag().raw()`, the TwinePool node index (untagged: `raw()` keeps
+    the public-name bit, which would sort every `\` name after every `$` one),
+    allocated in bump order; twine GC runs only BETWEEN passes.
+  * `ID("has_async_reset")` (a quoted argument) used to intern the literal
+    `\"has_async_reset"` and now fails to compile; it is
+    `uid("\\has_async_reset")`.  Both sides of every such private attribute are in
+    this plugin, so the spelling change is safe.
 
 **v0.69 is CMake-only** (since v0.68) — the top-level Makefile is gone.  Our CMakeLists builds
 Yosys via `cmake -B third_party/yosys/build … && cmake --build … && cmake
@@ -874,7 +897,7 @@ the location.  `merge_memwr_syncs()` (a module-level post-pass next to
 `finalize_dead_selfhold_defaults()`) therefore gathers, per (clock edge, clock
 signal), the memory-write actions of every sync that writes a memory another
 sync writes too, and puts them in ONE sync in SOURCE order -- recovered by
-sorting the processes on `name.index_` (IdString interning order == creation
+sorting the processes on `name.ref().untag().raw()` (TwinePool interning order == creation
 order), the one thing dict iteration does not give.  Only the actions move;
 each donor process keeps its root_case, which drives that port's addr/data/en
 wires.  Priority masks are reindexed so each action keeps exactly the priority

@@ -178,7 +178,7 @@ void UhdmImporter::import_gate(const gate* uhdm_gate, const std::string& instanc
         if (prim_type == vpiNotif0Prim || prim_type == vpiNotif1Prim) in = module->Not(NEW_ID, in.extract(0, out.size()));
         for (int b = 0; b < out.size(); b++) {
             RTLIL::Cell* c = module->addCell(
-                (b == 0 && !base.empty()) ? module->uniquify(RTLIL::escape_id(base)) : NEW_ID, ID($_TBUF_));
+                (b == 0 && !base.empty()) ? module->uniquify(uid(RTLIL::escape_id(base))) : module->twines().add(NEW_ID), ID($_TBUF_));
             c->setPort(ID::A, in[b]);
             c->setPort(ID::E, en);
             c->setPort(ID::Y, out[b]);
@@ -341,7 +341,7 @@ void UhdmImporter::import_gate(const gate* uhdm_gate, const std::string& instanc
             for (auto attr : *gate_obj->Attributes()) {
                 std::string attr_name = std::string(attr->VpiName());
                 if (attr_name.empty()) continue;
-                cell->attributes[RTLIL::escape_id(attr_name)] = import_attribute_value(attr);
+                cell->attributes[uid(RTLIL::escape_id(attr_name))] = import_attribute_value(attr);
             }
         }
     };
@@ -620,7 +620,7 @@ void UhdmImporter::import_gate_array_element(const gate* gate_template, const st
         for (auto attr : *gate_template->Attributes()) {
             std::string attr_name = std::string(attr->VpiName());
             if (attr_name.empty()) continue;
-            cell->attributes[RTLIL::escape_id(attr_name)] = import_attribute_value(attr);
+            cell->attributes[uid(RTLIL::escape_id(attr_name))] = import_attribute_value(attr);
         }
     }
     

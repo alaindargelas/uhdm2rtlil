@@ -69,7 +69,7 @@ int64_t UhdmImporter::evaluate_expression(const any* expr,
             // wrong arm and a parameter on the right-hand side initialised to 0.
             if (const any* actual = ref->Actual_group()) {
                 if (actual->UhdmType() == uhdmparameter) {
-                    RTLIL::IdString pid = RTLIL::escape_id(name);
+                    RTLIL::IdString pid = uid(RTLIL::escape_id(name));
                     if (module && module->parameter_default_values.count(pid) &&
                         module->parameter_default_values.at(pid).size() > 0) {
                         return module->parameter_default_values.at(pid).as_int();

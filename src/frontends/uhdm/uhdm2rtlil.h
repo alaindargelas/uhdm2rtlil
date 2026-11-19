@@ -43,6 +43,23 @@ YOSYS_NAMESPACE_BEGIN
 
 using namespace UHDM;
 
+// Yosys 0.71 interns IdStrings per Design (kernel/twine.h): an IdString is an
+// index into ONE design's TwinePool, so string <-> IdString conversion needs
+// that pool, and IdString lost str()/c_str() and its std::string constructor.
+// read_uhdm imports into exactly one design, and UhdmImporter's constructor
+// points uhdm_id_design at it, so these helpers -- usable from the file-scope
+// static helpers too -- always intern into the design being imported.
+extern RTLIL::Design *uhdm_id_design;
+inline RTLIL::IdString uid(std::string_view s) { return uhdm_id_design->twines().add(s); }
+inline std::string ustr(RTLIL::IdString id) { return uhdm_id_design->twines().str(id); }
+template<typename D> inline std::string ustr(const RTLIL::WrappedIdBase<D> &n) { return n.str(); }
+inline const std::string &ustr(const std::string &s) { return s; }
+template<typename T> requires requires(const T *o) { o->name.str(); }
+inline std::string ustr(const T *obj) { return obj->name.str(); }
+// 0.71 removed log_id(); keep its meaning (the unescaped name, valid for the
+// full expression -- every call site passes it straight to a log/printf).
+#define log_id(x) (RTLIL::unescape_id(ustr(x)).c_str())
+
 // read_uhdm's debug TRACE, printed only under `read_uhdm -debug`.
 //
 // The frontend carries ~1300 of these.  They used to call `log()` directly,
@@ -2005,7 +2022,7 @@ struct UhdmImporter {
     bool is_vpi_type(const UHDM::any* obj, int vpi_type);
     void process_assignment_lhs_rhs(const UHDM::assignment* assign, RTLIL::SigSpec& lhs, RTLIL::SigSpec& rhs);
     std::string generate_cell_name(const UHDM::any* uhdm_obj, const std::string& cell_type);
-    int incr_autoidx() { return autoidx++; }
+    int incr_autoidx() { return design->twines().next_autoidx(); }
     // Parameterized module creation
     std::string create_parameterized_module(const std::string& base_name, RTLIL::Module* base_module);
 };
