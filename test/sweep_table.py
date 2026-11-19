@@ -73,13 +73,16 @@ groups=[
  ('**Caliptra**',['caliptra'],'[caliptra]('+W+'sweep-caliptra.yml)'),
  ('**XiangShan** (香山)',['xiangshan'],'[ext]('+W+'sweep-ext.yml)'),
  ('**XiangShan core** (香山)',['xiangshan-core-full'],'[xiangshan]('+W+'sweep-xiangshan.yml)'),
- ('**External IP** (the other 30 repos; the XiangShan library is the row above)',['axi','caliptra-ss','common_cells','cv32e40p','cve2','cvfpu','cvw','hdmi','verilog-ethernet','verilog-pcie','adams-bridge','aib-protocols','aib-phy-hardware','veerwolf','serv','litex','vexriscv','rocket-chip','biriscv','zipcpu','hazard3','nvdla','openc910','boom','gemmini','openpiton','pulpissimo','cheshire','snitch','vta'],'[ext]('+W+'sweep-ext.yml)'),
+ ('**External IP** (the other 40 repos; the XiangShan library is the row above)',['apb','core-v-mcu','cv32e40s','cv32e40x','cv32e41p','naxriscv','opene906','register_interface','sonata-system','tech_cells_generic','axi','caliptra-ss','common_cells','cv32e40p','cve2','cvfpu','cvw','hdmi','verilog-ethernet','verilog-pcie','adams-bridge','aib-protocols','aib-phy-hardware','veerwolf','serv','litex','vexriscv','rocket-chip','biriscv','zipcpu','hazard3','nvdla','openc910','boom','gemmini','openpiton','pulpissimo','cheshire','snitch','vta'],'[ext]('+W+'sweep-ext.yml)'),
  ('**chipsalliance/sv-tests**',['sv-tests'],'[sv-tests]('+W+'sweep-sv-tests.yml)'),
  ('**sv-synth-tests** (the converted sv-tests of `test/sv_tests`)',['sv-synth-tests'],'[sv-synth-tests]('+W+'sweep-sv-synth-tests.yml)'),
  ('**sv-yosys-issues** (the YosysHQ/yosys SystemVerilog-issue corpus of `test/yosys_issues`)',['sv-yosys-issues'],'[sv-yosys-issues]('+W+'sweep-sv-yosys-issues.yml)'),
  ('**sv-elab-issues** (the povik/sv-elab issue corpus of `test/sv_elab_issues`)',['sv-elab-issues'],'[sv-elab-issues]('+W+'sweep-sv-elab-issues.yml)'),
  ('**slang-issues** (the MikePopoloski/slang synthesizable issue corpus of `test/slang_issues`)',['slang-issues'],'[slang-issues]('+W+'sweep-slang-issues.yml)'),
 ]
+_grouped={f for _,fams,_ in groups for f in fams}
+for _f in sorted(set(rep)-_grouped):
+    print(f'UNGROUPED {_f}: {rep[_f]["rows"]} rows are in NO table row -- add the family to a group')
 tot=collections.Counter(); seen=set()
 hdrs=['Core','Rows','Formal proven','`read_slang` co-simulated','pass','**diverge**','artefact / no oracle','`read_uhdm` co-simulated','pass','**diverge**','artefact','Undriven']
 print('| '+' | '.join(hdrs)+' |'); print('|---|'+'---:|'*(len(hdrs)-1))
