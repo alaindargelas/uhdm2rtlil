@@ -43,7 +43,7 @@ verilator --version  # confirm: "Verilator 5.048 ..."
 ## Build
 ```bash
 # Clone with submodules
-git clone --recursive https://github.com/alainmarcel/uhdm2rtlil.git
+git clone --recursive https://github.com/chipsalliance/uhdm2rtlil.git
 cd uhdm2rtlil
 
 # Configure git hooks (prevents committing files >10MB)

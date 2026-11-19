@@ -29,7 +29,7 @@ python3 ext_ip/ext_flow.py hdmi --survey                   # elaborate only (fir
 python3 ext_ip/ext_flow.py axi --list                      # module list
 ```
 
-The nightly [Sweep external IP](https://github.com/alainmarcel/uhdm2rtlil/actions/workflows/sweep-ext.yml)
+The nightly [Sweep external IP](https://github.com/chipsalliance/uhdm2rtlil/actions/workflows/sweep-ext.yml)
 workflow runs every family below as one sweep job and publishes the per-module
 table to the run's step summary.
 

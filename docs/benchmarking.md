@@ -210,7 +210,7 @@ synthesized SystemVerilog that the native Verilog frontend cannot even read (no
 golden to compare against, so it is verified against the RTL by co-simulation).
 
 The nightly run
-([Frontend Matrix](https://github.com/alainmarcel/uhdm2rtlil/actions/workflows/frontend-matrix.yml),
+([Frontend Matrix](https://github.com/chipsalliance/uhdm2rtlil/actions/workflows/frontend-matrix.yml),
 1847 tests) reports two things separately: what each frontend could **read**,
 and — where a `read_verilog` golden exists to compare against — whether it was
 **right**.
