@@ -1973,6 +1973,12 @@ struct UhdmImporter {
     int get_width_from_typespec(const UHDM::any* typespec, const UHDM::scope* inst = nullptr);
     const UHDM::module_inst* declaring_instance_of_typeparam_default(
         const UHDM::any* typespec);
+    // AllModules type-parameter DEFAULT typespec -> the VpiDefName of the
+    // first module declaring it.  Built once on first use: the scan it
+    // replaces walked every module's parameters on every width query and
+    // took ~80% of read_uhdm's time on BlackParrot's whole-core rows.
+    std::unordered_map<const UHDM::any*, std::string> typeparam_default_def_;
+    bool typeparam_default_def_built_ = false;
     const UHDM::module_inst* declaring_instance_of_cloned_typespec(const UHDM::any* typespec);
     // Substitute a `parameter type` DECLARATION-DEFAULT typespec with the
     // instance-bound type (returns input unchanged when no binding applies).

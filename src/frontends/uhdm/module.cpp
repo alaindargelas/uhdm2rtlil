@@ -4929,19 +4929,23 @@ UhdmImporter::declaring_instance_of_cloned_typespec(const UHDM::any* typespec) {
 const UHDM::module_inst*
 UhdmImporter::declaring_instance_of_typeparam_default(const UHDM::any* typespec) {
     if (!typespec || !uhdm_design || !uhdm_design->AllModules()) return nullptr;
-    std::string decl_def;
-    for (auto m : *uhdm_design->AllModules()) {
-        if (!m->Parameters()) continue;
-        for (auto p : *m->Parameters()) {
-            if (p->UhdmType() != uhdmtype_parameter) continue;
-            auto tp = any_cast<const UHDM::type_parameter*>(p);
-            if (!tp->Typespec()) continue;
-            if (tp->Typespec()->Actual_typespec() != typespec) continue;
-            decl_def = std::string(m->VpiDefName());
-            break;
+    if (!typeparam_default_def_built_) {
+        typeparam_default_def_built_ = true;
+        for (auto m : *uhdm_design->AllModules()) {
+            if (!m->Parameters()) continue;
+            for (auto p : *m->Parameters()) {
+                if (p->UhdmType() != uhdmtype_parameter) continue;
+                auto tp = any_cast<const UHDM::type_parameter*>(p);
+                if (!tp->Typespec() || !tp->Typespec()->Actual_typespec()) continue;
+                // emplace keeps the FIRST declaring module, as the scan did.
+                typeparam_default_def_.emplace(tp->Typespec()->Actual_typespec(),
+                                               std::string(m->VpiDefName()));
+            }
         }
-        if (!decl_def.empty()) break;
     }
+    std::string decl_def;
+    if (auto it = typeparam_default_def_.find(typespec); it != typeparam_default_def_.end())
+        decl_def = it->second;
     if (decl_def.empty()) {
         // An ELABORATED instance carries its own copy of an un-overridden
         // type parameter's default -- resolve_type_param_typespec hands that
