@@ -79,6 +79,14 @@ sound because read_uhdm only ever imports into ONE design.  Two traps:
     `\"has_async_reset"` and now fails to compile; it is
     `uid("\\has_async_reset")`.  Both sides of every such private attribute are in
     this plugin, so the spelling change is safe.
+  * `write_rtlil` now prints every module / wire / cell name as an opaque
+    twine handle with the real name in a trailing comment
+    (`module $pub@1058  # \t`, `cell $priv@1061 $pub@1059  # ...`).  Any
+    script that parses RTLIL text matches NOTHING and stays green: the CVA6
+    chip sweep reported `0 instances (uhdm), 0 (slang)` on its first 0.71
+    run.  Every harness `write_rtlil` passes `-readable`, the pre-0.71 format
+    (which `read_rtlil` still reads); keep it on any new one whose output a
+    script or a human reads.
 
 **v0.69 is CMake-only** (since v0.68) — the top-level Makefile is gone.  Our CMakeLists builds
 Yosys via `cmake -B third_party/yosys/build … && cmake --build … && cmake

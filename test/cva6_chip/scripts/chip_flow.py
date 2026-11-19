@@ -65,12 +65,12 @@ def elaborate():
     errs = re.search(r"\[  ERROR\] : (\d+)", (W / "surelog.log").read_text(errors="replace"))
     print(f"# surelog errors: {errs.group(1) if errs else '?'}")
     (W / "uhdm_read.ys").write_text(
-        f"read_uhdm slpp_all/surelog.uhdm\nhierarchy -check -top {TOP}\nwrite_rtlil {UH.name}\n")
+        f"read_uhdm slpp_all/surelog.uhdm\nhierarchy -check -top {TOP}\nwrite_rtlil -readable {UH.name}\n")
     if run([Y, "-q", "-m", P, "uhdm_read.ys"], "uhdm_read.log", timeout=3600) or not UH.exists():
         print("# read_uhdm FAILED"); return False
     (W / "slang_keep.ys").write_text(
         f"read_slang --ignore-assertions -f {FLIST} --top {TOP} --keep-hierarchy\n"
-        f"hierarchy -check -top {TOP}\nwrite_rtlil {SL.name}\n")
+        f"hierarchy -check -top {TOP}\nwrite_rtlil -readable {SL.name}\n")
     if run([Y, "-q", "slang_keep.ys"], "slang_keep.log", timeout=3600) or not SL.exists():
         print("# read_slang FAILED"); return False
     return True
@@ -179,7 +179,7 @@ def split():
         for n in names:
             t = cells[by_short[n]]
             ys += [f"hierarchy -top {t}", f"rename {t} {n}_{tag}",
-                   f"write_rtlil {INST}/{n}_{tag}.il", "design -load full"]
+                   f"write_rtlil -readable {INST}/{n}_{tag}.il", "design -load full"]
         (INST / f"split_{tag}.ys").write_text("\n".join(ys) + "\n")
         r = subprocess.run([Y, "-q", "-m", P, str(INST / f"split_{tag}.ys")],
                            capture_output=True, text=True)

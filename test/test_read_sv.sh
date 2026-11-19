@@ -50,7 +50,7 @@ echo "▶ read_sv: compiling SystemVerilog in-process (no .uhdm file)"
     hierarchy -top read_sv_smoke
     proc; opt
     rename -top gate
-    write_rtlil gate.il"
+    write_rtlil -readable gate.il"
 
 echo "▶ reference: Yosys Verilog frontend"
 "$YOSYS" -q -p "
@@ -58,7 +58,7 @@ echo "▶ reference: Yosys Verilog frontend"
     hierarchy -top read_sv_smoke
     proc; opt
     rename -top gold
-    write_rtlil gold.il"
+    write_rtlil -readable gold.il"
 
 # (1) read_sv must have produced a non-empty module.
 if ! grep -q '^module ' gate.il; then

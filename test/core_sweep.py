@@ -639,7 +639,7 @@ def _only_empty_modules(d):
     # wires (`(* blackbox *) module alu(); parameter FOO = 0; ...`) holds no
     # selectable object, so `select -assert-min 1` miscounts it as absent.
     rc, out = sh(_mem_capped([str(yosys), "-q", "-m", str(plugin), "-p",
-                              "read_uhdm slpp_all/surelog.uhdm; write_rtlil -"]),
+                              "read_uhdm slpp_all/surelog.uhdm; write_rtlil -readable -"]),
                  cwd=d, timeout=600)
     if rc != 0:
         return False

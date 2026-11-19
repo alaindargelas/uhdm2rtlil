@@ -480,7 +480,7 @@ def _iface_port_wrapper(w, fam, mod, files, def_flags=(), inc_flags=(), src_byte
         if brc == 0 and (bw / "slpp_all" / "surelog.uhdm").exists():
             (bw / "boot.ys").write_text(
                 f"read_uhdm slpp_all/surelog.uhdm\nhierarchy -top {mod}\n"
-                f"write_rtlil ../bare_hier.il\n")
+                f"write_rtlil -readable ../bare_hier.il\n")
             krc, kout = sh(_capped([str(Y), "-q", "-m", str(P), "boot.ys"]),
                            cwd=bw, timeout=_sl_timeout(src_bytes))
             (bw / "boot.log").write_text(kout or "")
@@ -694,7 +694,7 @@ def _uhdm_only_cosim(w, m, top, cycles, ties, mem):
     the point: the RTL is the reference, not the other frontend."""
     (w / "ren_uhdm.ys").write_text(
         f"read_rtlil uhdm_hier.il\nhierarchy -top {top}\nrename {top} {m}_uhdm\n"
-        f"write_rtlil {m}_uhdm.il\n")
+        f"write_rtlil -readable {m}_uhdm.il\n")
     sh([str(Y), "-q", "ren_uhdm.ys"], cwd=w, timeout=600)
     cw = w / "cosim"
     cw.mkdir(exist_ok=True)
@@ -916,7 +916,7 @@ def run_module(fam, cl, m, seq, tmo, want, incs, defines, cycles, do_cosim, surv
     # were being reported as read-failures purely for this reason.
     (w / "slang.ys").write_text(
         f"read_slang --ignore-assertions {SLANG_FLAGS} {slang_defs} {slang_incs} {srcs_q} --top {top}\n"
-        f"hierarchy -check -top {top}\nwrite_rtlil slang_hier.il\n")
+        f"hierarchy -check -top {top}\nwrite_rtlil -readable slang_hier.il\n")
     # NOT -q: the per-line slang diagnostics are what tell a default-parameter
     # elaboration failure apart from a slang limitation, and -q collapses them
     # to a bare "Design elaboration failed".
@@ -956,7 +956,7 @@ def run_module(fam, cl, m, seq, tmo, want, incs, defines, cycles, do_cosim, surv
     flat = "flatten\n" if src_bytes <= FLATTEN_LIMIT else ""
     (w / "check.ys").write_text(
         f"read_uhdm slpp_all/surelog.uhdm\nhierarchy -check -top {top}\n"
-        f"write_rtlil uhdm_hier.il\nproc\n{flat}opt_clean\nstat\ncheck\n"
+        f"write_rtlil -readable uhdm_hier.il\nproc\n{flat}opt_clean\nstat\ncheck\n"
         f"select -list a:uhdm_src_lhs\n")
     rc, out = sh(_capped([str(Y), "-q", "-m", str(P), "check.ys"]), cwd=w,
                  timeout=_sl_timeout(src_bytes))
@@ -1058,7 +1058,7 @@ sat -verify -prove-asserts -seq {seq} -set-init-zero miter
         for tag in ("uhdm", "slang"):
             (w / f"ren_{tag}.ys").write_text(
                 f"read_rtlil {tag}_hier.il\nhierarchy -top {top}\nrename {top} {m}_{tag}\n"
-                f"write_rtlil {m}_{tag}.il\n")
+                f"write_rtlil -readable {m}_{tag}.il\n")
             sh([str(Y), "-q", f"ren_{tag}.ys"], cwd=w, timeout=600)
         cw = w / "cosim"
         cw.mkdir(exist_ok=True)

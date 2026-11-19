@@ -232,7 +232,7 @@ def _wrap_iface(d, p, text, top):
         out = Path(td) / "w.sv"
         r = subprocess.run([str(YOSYS), "-q", "-m", str(PLUGIN), "-p",
                             f"read_uhdm slpp_all/surelog.uhdm; hierarchy -top {top}; "
-                            f"proc; write_rtlil {il}"], cwd=d, capture_output=True,
+                            f"proc; write_rtlil -readable {il}"], cwd=d, capture_output=True,
                            text=True, timeout=600)
         if r.returncode or not il.exists():
             return "iface: no netlist"

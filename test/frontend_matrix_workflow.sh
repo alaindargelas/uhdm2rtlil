@@ -113,7 +113,7 @@ record_status() {
 emit_tail() {
     local f="$1"
     cat <<EOF
-write_rtlil ${MODULE_NAME}_from_${f}_nohier.il
+write_rtlil -readable ${MODULE_NAME}_from_${f}_nohier.il
 hierarchy -check -auto-top
 proc
 opt

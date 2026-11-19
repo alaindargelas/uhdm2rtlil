@@ -35,12 +35,12 @@ assert by_t, "no cex rows found"
 ys = f"""read_uhdm slpp_all/surelog.uhdm
 hierarchy -check -top {TOP}
 flatten; proc; opt -fast; setundef -undriven -zero
-write_rtlil goldr.il
+write_rtlil -readable goldr.il
 design -reset
 read_slang -f {FLIST} ../wrapper_{mod}.sv --top {TOP}
 hierarchy -check -top {TOP}
 flatten; proc; opt -fast; setundef -undriven -zero
-write_rtlil gater.il
+write_rtlil -readable gater.il
 """
 open('rep.ys', 'w').write(ys)
 subprocess.run([YOSYS, "-q", "-m", PLUGIN, "rep.ys"], check=True)

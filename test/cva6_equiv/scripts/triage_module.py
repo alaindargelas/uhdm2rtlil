@@ -41,12 +41,12 @@ if not os.path.exists('gold.il') or os.path.getmtime('gold.il') < os.path.getmti
     ys = f"""read_uhdm slpp_all/surelog.uhdm
 hierarchy -check -top {mod}_equiv
 flatten; proc; opt -fast
-write_rtlil gold.il
+write_rtlil -readable gold.il
 design -reset
 read_slang -f {FLIST} ../wrapper_{mod}.sv --top {mod}_equiv
 hierarchy -check -top {mod}_equiv
 flatten; proc; opt -fast
-write_rtlil gate.il"""
+write_rtlil -readable gate.il"""
     open('d.ys','w').write(ys)
     subprocess.run([YOSYS,'-m',PLUGIN,'-q','d.ys'], capture_output=True, text=True)
 

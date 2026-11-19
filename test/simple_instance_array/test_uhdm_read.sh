@@ -12,7 +12,7 @@ plugin -i /home/alain/uhdm2rtlil/build/uhdm2rtlil.so
 read_uhdm slpp_all/surelog.uhdm
 hierarchy -top simple_instance_array
 stat
-write_rtlil rtlil_uhdm.txt
+write_rtlil -readable rtlil_uhdm.txt
 EOF
 
 echo "Running yosys with UHDM frontend..."
