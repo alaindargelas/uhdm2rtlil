@@ -1,0 +1,14 @@
+# Every condition over the REAL Q = 0.25 must take its TRUE arm.
+read_uhdm slpp_all/surelog.uhdm
+hierarchy -check -top dut
+proc; flatten; opt
+# the clocked arm: the register's D input is i itself, not ~i
+select -assert-count 1 t:$dff
+select -assert-count 1 t:$dff %ci1:+[D] w:i %i
+# Yosys 0.71's sat has no model for a $dff; the rest is combinational.
+delete t:$dff
+sat -verify -prove t_tern 1'1 -prove t_not 1'0 -prove t_neg0 1'0
+sat -verify -set i 1'1 -prove t_or 1'1 -prove c_if 1'1
+sat -verify -set i 1'0 -prove t_or 1'0 -prove c_if 1'0
+sat -verify -set i 1'1 -set sel 2'd1 -prove c_case 1'1
+sat -verify -set i 1'0 -set sel 2'd1 -prove c_case 1'0

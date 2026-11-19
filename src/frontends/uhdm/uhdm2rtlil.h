@@ -1850,6 +1850,10 @@ struct UhdmImporter {
     // a constant.  `saw_real` reports whether a real literal or real function was
     // involved (an all-integer tree is left to the integer paths).
     bool try_eval_real(const UHDM::any* e, double& out, bool& saw_real, int depth = 0);
+    // Import an expression used as a CONDITION (if / ?: / ! / && / ||): a
+    // constant REAL there is true when nonzero, not when its integer
+    // conversion is (`localparam real Q = 0.25; if (Q)` is TRUE).
+    RTLIL::SigSpec import_condition(const UHDM::any* e, const std::map<std::string, RTLIL::SigSpec>* input_mapping = nullptr);
     static RTLIL::Const import_attribute_value(const UHDM::attribute* attr);
     RTLIL::SigSpec extract_function_return_value(const UHDM::any* stmt, const std::string& func_name, int width);
     

@@ -8781,6 +8781,20 @@ bool UhdmImporter::unpacked_decl_geometry(const UHDM::any* decl, int& n, int& ew
 }
 
 
+// A REAL used as a CONDITION is true when it is NONZERO (LRM 12.4, 11.4.7):
+// `localparam real Q = 0.25; a = Q ? 1 : 0; if (Q) r = i;` gives a = 1, r = i.
+// Imported as a value first, Q converts to an integer by ROUNDING (0.25 -> 0)
+// and the false arm was taken (Yosys 0.71 tests/simple/real_cond.v).  A
+// condition that is not a constant real tree imports exactly as before.
+RTLIL::SigSpec UhdmImporter::import_condition(const UHDM::any* e,
+        const std::map<std::string, RTLIL::SigSpec>* input_mapping) {
+    double v = 0.0;
+    bool saw_real = false;
+    if (e && try_eval_real(e, v, saw_real) && saw_real)
+        return RTLIL::SigSpec(v != 0.0 ? RTLIL::State::S1 : RTLIL::State::S0);
+    return import_expression(any_cast<const expr*>(e), input_mapping);
+}
+
 // A constant expression over REAL values -- `int'($pow(2.25, 2) * 10000)`,
 // `$sqrt(9)`, `$hypot(2.1, 3.7) * 1000` -- has no RTLIL form between its leaves
 // and its integer result: the importer carries only bit vectors, so folding the
@@ -8923,7 +8937,14 @@ bool UhdmImporter::try_eval_real(const UHDM::any* e, double& out, bool& saw_real
             }
             if (n == "$rtoi") {
                 if (!arg(0, a)) return false;
-                out = std::trunc(a); return true;
+                // `$rtoi` returns an INTEGER (32 bits).  Out of that range the
+                // LRM says only "truncating"; follow Yosys 0.71 and most
+                // commercial tools: wrap a finite value modulo 2^32 and map
+                // infinity / NaN to 0.  `$rtoi(1.0e20)` = 1661992960 (fmod is
+                // exact); unwrapped, the later double->integer conversion
+                // overflowed and read 0 (tests/simple/real_rtoi.v).
+                out = std::isfinite(a) ? std::fmod(std::trunc(a), 4294967296.0) : 0.0;
+                return true;
             }
             // `$realtobits(r)` is the IEEE-754 pattern of r as a 64-bit integer;
             // `$bitstoreal(b)` undoes it.  `$shortrealtobits` / `$bitstoshortreal`
@@ -10674,7 +10695,12 @@ RTLIL::SigSpec UhdmImporter::import_operation(const operation* uhdm_op, const UH
                     expression_context_unsigned = false;
                 }
             }
-            RTLIL::SigSpec op_sig = import_expression(any_cast<const expr*>(operand), input_mapping);
+            const bool bool_ctx_operand =
+                (op_type == vpiConditionOp && operands.empty()) ||
+                op_type == vpiNotOp || op_type == vpiLogAndOp || op_type == vpiLogOrOp;
+            RTLIL::SigSpec op_sig = bool_ctx_operand
+                ? import_condition(operand, input_mapping)
+                : import_expression(any_cast<const expr*>(operand), input_mapping);
             if (ctx_det_shift_lhs)
                 expression_context_width = cond_saved_ctx;
             if (op_type == vpiConditionOp || op_type == vpiMultiConcatOp || self_det_rhs) {
