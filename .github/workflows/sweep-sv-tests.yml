@@ -67,22 +67,22 @@ jobs:
       id: cache-verilator
       uses: actions/cache@v4
       with:
-        path: /opt/verilator-5.048
-        key: verilator-5.048-${{ runner.os }}
+        path: /opt/verilator-5.054
+        key: verilator-5.054-${{ runner.os }}
 
-    - name: Build Verilator 5.048 from source
+    - name: Build Verilator 5.054 from source
       if: steps.cache-verilator.outputs.cache-hit != 'true'
       run: |
         sudo apt-get install -y autoconf
-        git clone --depth=1 -b v5.048 https://github.com/verilator/verilator.git /tmp/verilator
+        git clone --depth=1 -b v5.054 https://github.com/verilator/verilator.git /tmp/verilator
         cd /tmp/verilator
         autoconf
-        ./configure --prefix=/opt/verilator-5.048
+        ./configure --prefix=/opt/verilator-5.054
         make -j$(nproc)
         sudo make install
 
     - name: Put Verilator on PATH
-      run: echo "/opt/verilator-5.048/bin" >> $GITHUB_PATH
+      run: echo "/opt/verilator-5.054/bin" >> $GITHUB_PATH
 
     - name: Setup ccache
       uses: hendrikmuhs/ccache-action@v1.2

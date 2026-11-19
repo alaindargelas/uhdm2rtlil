@@ -114,13 +114,12 @@ def netlist(tag, il, nl):
             if b"endmodule" in fh.read():
                 return True
     mod = args.top if tag == 'uhdm' else args.top.replace('_uhdm', '_slang')
-    # --probe keeps the HIERARCHY.  Flattening is what makes the netlist fast,
-    # but it turns every internal wire into one escaped `a.b.c` identifier, and
-    # Verilator 5.048 cannot trace those: once a name is long enough to be
-    # hash-shortened it hits "Internal Error: String not in reverse hash map
-    # '__Vhsh...__BRA__63__03a9__KET__'" under --trace, --trace-fst and
-    # --trace-structs alike.  Unflattened, names stay short and the VCD carries
-    # real hierarchy -- which is also what makes them match the RTL's paths.
+    # --probe keeps the HIERARCHY, so the VCD carries real hierarchy and its
+    # names match the RTL's paths.  (It was also forced by Verilator 5.048,
+    # which could not trace a flattened netlist's long escaped `a.b.c[i]`
+    # names -- "Internal Error: String not in reverse hash map '__Vhsh...'"
+    # under --trace and --trace-fst alike.  5.054 traces them; the hierarchy
+    # is kept for the path matching alone.)
     flat = "" if args.probe else "flatten\nopt_clean"
     # The netlist module takes the RTL name in the written Verilog (below):
     # yosys's `rename` asserts on these instance ILs.

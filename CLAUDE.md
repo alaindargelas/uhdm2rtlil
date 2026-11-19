@@ -570,14 +570,14 @@ Three things this pass had to get right, each of which silently breaks it:
 
 * **`--probe` must NOT flatten the netlist.**  Flattening is what makes the
   co-sim fast, but it turns every internal wire into one escaped `a.b.c`
-  identifier, and **Verilator 5.048 cannot trace those**: once a name is long
-  enough to be hash-shortened it aborts with `Internal Error:
-  ../V3String.cpp:657: String not in reverse hash map
-  '__Vhsh...__BRA__63__03a9__KET__'`, identically under `--trace`,
-  `--trace-fst` and `--trace-structs`.  Unflattened, names stay short and carry
-  real hierarchy -- which is also what makes them match the RTL's paths.  The
-  read_slang netlist still cannot be traced (its internal names are escaped
-  even unflattened), so the slang column is often absent.
+  identifier, and only the unflattened netlist carries real hierarchy --
+  which is what makes its names match the RTL's paths.  (Verilator 5.048
+  also could not TRACE such names once they were long enough to be
+  hash-shortened: `Internal Error: ../V3String.cpp:657: String not in reverse
+  hash map '__Vhsh...__BRA__63__03a9__KET__'` under `--trace` and
+  `--trace-fst` alike.  Fixed in 5.054, which CI pins since 2026-11-19 -- the
+  cv32e40s `*_obi_interface` flat netlists crash 5.048 and trace on 5.054 --
+  so the pavona `cs_trace_prep.py` renamers are no longer required either.)
 * **One cause fans out.**  The first run on axi_rt_unit_top_synth reported 134
   diverging signals -- the same wire aliased at two scopes plus everything
   downstream.  probe_diff groups by (rtl series, uhdm series) and keeps the
