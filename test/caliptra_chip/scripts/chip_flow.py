@@ -110,7 +110,7 @@ def elaborate():
     if not uhdm:
         return False
     (W / "bare_read.ys").write_text(
-        f"read_uhdm {uhdm}\nhierarchy -check -top {INNER}\nwrite_rtlil {BARE.name}\n")
+        f"read_uhdm {uhdm}\nhierarchy -check -top {INNER}\nwrite_rtlil -readable {BARE.name}\n")
     if run([Y, "-q", "-m", P, "bare_read.ys"], "bare_read.log", timeout=3600) \
             or not BARE.exists():
         print("# read_uhdm (bare) FAILED"); return False
@@ -123,7 +123,7 @@ def elaborate():
     if not uhdm:
         return False
     (W / "uhdm_read.ys").write_text(
-        f"read_uhdm {uhdm}\nhierarchy -check -top {TOP}\nwrite_rtlil {UH.name}\n")
+        f"read_uhdm {uhdm}\nhierarchy -check -top {TOP}\nwrite_rtlil -readable {UH.name}\n")
     if run([Y, "-q", "-m", P, "uhdm_read.ys"], "uhdm_read.log", timeout=3600) \
             or not UH.exists():
         print("# read_uhdm FAILED"); return False
@@ -132,7 +132,7 @@ def elaborate():
         f"read_slang --ignore-assertions --single-unit --relax-enum-conversions "
         f"{sinc} {' '.join(srcs)} {WRAPPER} "
         f"--top {TOP} --keep-hierarchy\nhierarchy -check -top {TOP}\n"
-        f"write_rtlil {SL.name}\n")
+        f"write_rtlil -readable {SL.name}\n")
     if run([Y, "-q", "slang_keep.ys"], "slang_keep.log", timeout=3600) or not SL.exists():
         print("# read_slang FAILED"); return False
     return True
@@ -195,7 +195,7 @@ def split():
         for n in common:
             t = cells[n]
             ys += [f"hierarchy -top {t}", f"rename {t} {n}_{tag}",
-                   f"write_rtlil {INST}/{n}_{tag}.il", "design -load full"]
+                   f"write_rtlil -readable {INST}/{n}_{tag}.il", "design -load full"]
         (INST / f"split_{tag}.ys").write_text("\n".join(ys) + "\n")
     for tag in ("uhdm", "slang"):
         subprocess.run([Y, "-q", "-m", P, str(INST / f"split_{tag}.ys")],

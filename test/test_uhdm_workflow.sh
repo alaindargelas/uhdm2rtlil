@@ -134,13 +134,13 @@ read_uhdm $UHDM_READ_FLAG slpp_all/surelog.uhdm
 # must not reach the synthesised Verilog the equivalence flow compares.
 setattr -unset uhdm_src_lhs
 # Write RTLIL immediately after reading, before hierarchy
-write_rtlil ${MODULE_NAME}_from_uhdm_nohier.il
+write_rtlil -readable ${MODULE_NAME}_from_uhdm_nohier.il
 hierarchy -check -auto-top
 stat
 proc
 opt
 stat
-write_rtlil ${MODULE_NAME}_from_uhdm.il
+write_rtlil -readable ${MODULE_NAME}_from_uhdm.il
 # Synthesize to gate-level netlist
 synth -auto-top
 write_verilog -noexpr ${MODULE_NAME}_from_uhdm_synth.v
@@ -155,13 +155,13 @@ cat > test_verilog_read.ys << EOF
 # Test script to read Verilog file directly in Yosys
 read_verilog $YOSYS_READ_FLAG $VERILOG_READ_FLAG_FORMAL $PROJECT_SRCS
 # Write RTLIL immediately after reading, before hierarchy
-write_rtlil ${MODULE_NAME}_from_verilog_nohier.il
+write_rtlil -readable ${MODULE_NAME}_from_verilog_nohier.il
 hierarchy -check -auto-top
 stat
 proc
 opt
 stat
-write_rtlil ${MODULE_NAME}_from_verilog.il
+write_rtlil -readable ${MODULE_NAME}_from_verilog.il
 # Synthesize to gate-level netlist
 synth -auto-top
 write_verilog -noexpr ${MODULE_NAME}_from_verilog_synth.v

@@ -237,13 +237,13 @@ def deep_check(args, rel, work, p, files, incs, defs, sl_args, timeout):
 
     rc, _ = _netlist(work, "deep_uhdm.ys",
                      f"plugin -i {PLUGIN}\nread_uhdm slpp_all/surelog.uhdm\n"
-                     f"hierarchy -check -top {top}\nwrite_rtlil uhdm_hier.il\n", timeout)
+                     f"hierarchy -check -top {top}\nwrite_rtlil -readable uhdm_hier.il\n", timeout)
     if rc != 0:
         out["formal"] = "— (uhdm netlist failed)"
         return out
     rc, _ = _netlist(work, "deep_slang.ys",
                      "read_slang " + " ".join(sl_args + files) +
-                     f"\nhierarchy -check -top {top}\nwrite_rtlil slang_hier.il\n", timeout)
+                     f"\nhierarchy -check -top {top}\nwrite_rtlil -readable slang_hier.il\n", timeout)
     have_slang = rc == 0
 
     try:

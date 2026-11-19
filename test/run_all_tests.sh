@@ -886,11 +886,11 @@ setup_yosys_test() {
     cat > "$abs_dir/test_verilog_read.ys" << EOF
 read_verilog -sv dut.${dut_ext}${sibling_files}
 ${lib_reads}
-write_rtlil ${test_name}_from_verilog_nohier.il
+write_rtlil -readable ${test_name}_from_verilog_nohier.il
 hierarchy -auto-top
 proc
 opt
-write_rtlil ${test_name}_from_verilog.il
+write_rtlil -readable ${test_name}_from_verilog.il
 synth -auto-top
 write_verilog -noexpr ${test_name}_from_verilog_synth.v
 EOF
@@ -902,11 +902,11 @@ EOF
 plugin -i $UHDM_PLUGIN
 read_uhdm -allow-undefined-modules slpp_all/surelog.uhdm
 ${lib_reads}
-write_rtlil ${test_name}_from_uhdm_nohier.il
+write_rtlil -readable ${test_name}_from_uhdm_nohier.il
 hierarchy -auto-top
 proc
 opt
-write_rtlil ${test_name}_from_uhdm.il
+write_rtlil -readable ${test_name}_from_uhdm.il
 synth -auto-top
 write_verilog -noexpr ${test_name}_from_uhdm_synth.v
 EOF

@@ -41,12 +41,12 @@ if _stale("goldv.v") or _stale("gatev.v"):
     open('cos.ys','w').write(f"""read_uhdm slpp_all/surelog.uhdm
 hierarchy -check -top {TOP}
 flatten; proc; opt -fast; setundef -undriven -zero
-write_rtlil goldr.il
+write_rtlil -readable goldr.il
 design -reset
 read_slang -f {FLIST} ../wrapper_{mod}.sv --top {TOP}
 hierarchy -check -top {TOP}
 flatten; proc; opt -fast; setundef -undriven -zero
-write_rtlil gater.il
+write_rtlil -readable gater.il
 """)
     subprocess.run([YOSYS, "-q", "-m", PLUGIN, "cos.ys"], check=True)
     subprocess.run([YOSYS, "-q", "-p", "read_rtlil goldr.il; write_verilog -noattr goldv.v"], check=True)

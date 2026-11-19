@@ -100,14 +100,14 @@ def elaborate():
     print(f"# surelog errors: {errs.group(1) if errs else '?'}")
     (W / "uhdm_read.ys").write_text(
         f"read_uhdm slpp_all/surelog.uhdm\nhierarchy -check -top {TOP}\n"
-        f"write_rtlil {UH.name}\n")
+        f"write_rtlil -readable {UH.name}\n")
     if run([Y, "-q", "-m", P, "uhdm_read.ys"], "uhdm_read.log", timeout=3600) or not UH.exists():
         print("# read_uhdm FAILED"); return False
     sinc = " ".join(f"-I {d}" for d in incs)
     (W / "slang_keep.ys").write_text(
         f"read_slang --ignore-assertions -DSYNTHESIS --single-unit --relax-enum-conversions "
         f"{sinc} {PAVONA}/hw/ip/prim/rtl/prim_assert.sv {' '.join(srcs)} "
-        f"--top {TOP} --keep-hierarchy\nhierarchy -check -top {TOP}\nwrite_rtlil {SL.name}\n")
+        f"--top {TOP} --keep-hierarchy\nhierarchy -check -top {TOP}\nwrite_rtlil -readable {SL.name}\n")
     if run([Y, "-q", "slang_keep.ys"], "slang_keep.log", timeout=3600) or not SL.exists():
         print("# read_slang FAILED"); return False
     return True
@@ -143,7 +143,7 @@ def split():
         for n in common:
             t = cells[n]
             ys += [f"hierarchy -top {t}", f"rename {t} {n}_{tag}",
-                   f"write_rtlil {INST}/{n}_{tag}.il", "design -load full"]
+                   f"write_rtlil -readable {INST}/{n}_{tag}.il", "design -load full"]
         (INST / f"split_{tag}.ys").write_text("\n".join(ys) + "\n")
     for tag in ("uhdm", "slang"):
         subprocess.run([Y, "-q", "-m", P, str(INST / f"split_{tag}.ys")],
@@ -166,7 +166,7 @@ def miter(n):
     if n in GCLK:
         clks, glob, words, seq = GCLK[n]
         flow = GFLOW.format(m=words, g=glob)
-        cstr = (f"write_rtlil {d}/miter.il\n"
+        cstr = (f"write_rtlil -readable {d}/miter.il\n"
                 f"!python3 {ADD_CLK_EXCL} {d}/miter.il {' '.join('in_' + c for c in clks)}\n"
                 f"design -reset\nread_rtlil {d}/miter.il\n")
         satx = "-set-assumes"

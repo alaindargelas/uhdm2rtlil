@@ -22,13 +22,13 @@ cat > test_uhdm_read.ys << EOF
 plugin -i ${BUILD_DIR}/uhdm2rtlil.so
 read_uhdm slpp_all/surelog.uhdm
 # Write RTLIL immediately after reading, before hierarchy
-write_rtlil ${MODULE_NAME}_from_uhdm_nohier.il
+write_rtlil -readable ${MODULE_NAME}_from_uhdm_nohier.il
 hierarchy -check -top ${MODULE_NAME}
 stat
 proc
 opt
 stat
-write_rtlil ${MODULE_NAME}_from_uhdm.il
+write_rtlil -readable ${MODULE_NAME}_from_uhdm.il
 # Synthesize to gate-level netlist
 synth -top ${MODULE_NAME}
 write_verilog -noexpr ${MODULE_NAME}_from_uhdm_synth.v
@@ -39,13 +39,13 @@ cat > test_verilog_read.ys << EOF
 # Test script to read Verilog file in Yosys
 read_verilog -sv dut.sv
 # Write RTLIL immediately after reading, before hierarchy
-write_rtlil ${MODULE_NAME}_from_verilog_nohier.il
+write_rtlil -readable ${MODULE_NAME}_from_verilog_nohier.il
 hierarchy -check -top ${MODULE_NAME}
 stat
 proc
 opt
 stat
-write_rtlil ${MODULE_NAME}_from_verilog.il
+write_rtlil -readable ${MODULE_NAME}_from_verilog.il
 # Synthesize to gate-level netlist
 synth -top ${MODULE_NAME}
 write_verilog -noexpr ${MODULE_NAME}_from_verilog_synth.v

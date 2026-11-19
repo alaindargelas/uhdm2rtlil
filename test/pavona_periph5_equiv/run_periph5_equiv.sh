@@ -73,7 +73,7 @@ run_one() {
   if [ -f "$HERE/wrappers/clk_excl_$m.txt" ]; then
     local clks; clks=$(grep -v '^memsize' "$HERE/wrappers/clk_excl_$m.txt" | head -1)
     FLOW="flatten; proc; opt; memory -nordff -nomap; ${MEMS}clk2fflogic; memory_map -formal; opt_clean; delete t:\$check t:\$assert t:\$assume t:\$print"
-    CSTR="write_rtlil miter.il
+    CSTR="write_rtlil -readable miter.il
 !python3 $HERE/scripts/add_clk_excl.py miter.il $(for c in $clks; do printf 'in_%s ' "$c"; done)
 design -reset
 read_rtlil miter.il"
