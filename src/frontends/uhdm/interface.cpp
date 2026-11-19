@@ -73,7 +73,7 @@ void UhdmImporter::import_interface(const interface_inst* uhdm_interface) {
         }
     }
     
-    RTLIL::IdString mod_id = RTLIL::escape_id(param_module_name);
+    RTLIL::IdString mod_id = uid(RTLIL::escape_id(param_module_name));
     
     // Check if this interface module already exists
     if (design->module(mod_id)) {
@@ -85,14 +85,14 @@ void UhdmImporter::import_interface(const interface_inst* uhdm_interface) {
     RTLIL::Module* iface_module = design->addModule(mod_id);
     
     // Add interface attributes
-    iface_module->attributes[RTLIL::escape_id("hdlname")] = RTLIL::Const(interface_name);
-    iface_module->attributes[RTLIL::escape_id("is_interface")] = RTLIL::Const(1);
-    iface_module->attributes[RTLIL::escape_id("dynports")] = RTLIL::Const(1);
+    iface_module->attributes[uid(RTLIL::escape_id("hdlname"))] = RTLIL::Const(interface_name);
+    iface_module->attributes[uid(RTLIL::escape_id("is_interface"))] = RTLIL::Const(1);
+    iface_module->attributes[uid(RTLIL::escape_id("dynports"))] = RTLIL::Const(1);
     add_src_attribute(iface_module->attributes, uhdm_interface);
     
     // Add all parameters
     for (const auto& [param_name, param_value] : param_values) {
-        RTLIL::IdString param_id = RTLIL::escape_id(param_name);
+        RTLIL::IdString param_id = uid(RTLIL::escape_id(param_name));
         iface_module->avail_parameters(param_id);
         iface_module->parameter_default_values[param_id] = RTLIL::Const(param_value, 32);
     }
@@ -328,8 +328,8 @@ void UhdmImporter::import_interface_instances(const UHDM::module_inst* uhdm_modu
             int interface_width = 8; // default
             
             // First check if the current module has a WIDTH parameter
-            if (module->parameter_default_values.count(RTLIL::escape_id("WIDTH"))) {
-                interface_width = module->parameter_default_values.at(RTLIL::escape_id("WIDTH")).as_int();
+            if (module->parameter_default_values.count(uid(RTLIL::escape_id("WIDTH")))) {
+                interface_width = module->parameter_default_values.at(uid(RTLIL::escape_id("WIDTH"))).as_int();
                 uhdm_trace("UHDM: Using module's WIDTH parameter: %d\n", interface_width);
             } else {
                 // Fall back to interface instance's parameter assignments
@@ -1230,7 +1230,7 @@ void UhdmImporter::import_interface_instances(const UHDM::module_inst* uhdm_modu
                     }
                 }
                 
-                RTLIL::IdString cell_name = "\\" + interface_name;
+                RTLIL::IdString cell_name = uid("\\" + interface_name);
                 // For an interface PORT (e.g. `tcb_lite_if.man tcb_ifu` on
                 // rp32 r5p_degu), the interface's signals are already created
                 // as wires and the port itself may exist as a wire/cell, so an
@@ -1311,7 +1311,7 @@ void UhdmImporter::create_interface_module_with_width(const std::string& interfa
         param_module_name += ((width >> i) & 1) ? "1" : "0";
     }
     
-    RTLIL::IdString mod_id = RTLIL::escape_id(param_module_name);
+    RTLIL::IdString mod_id = uid(RTLIL::escape_id(param_module_name));
     
     // Check if this interface module already exists
     if (design->module(mod_id)) {
@@ -1323,13 +1323,13 @@ void UhdmImporter::create_interface_module_with_width(const std::string& interfa
     RTLIL::Module* iface_module = design->addModule(mod_id);
     
     // Add interface attributes
-    iface_module->attributes[RTLIL::escape_id("hdlname")] = RTLIL::Const(interface_name);
-    iface_module->attributes[RTLIL::escape_id("is_interface")] = RTLIL::Const(1);
-    iface_module->attributes[RTLIL::escape_id("dynports")] = RTLIL::Const(1);
+    iface_module->attributes[uid(RTLIL::escape_id("hdlname"))] = RTLIL::Const(interface_name);
+    iface_module->attributes[uid(RTLIL::escape_id("is_interface"))] = RTLIL::Const(1);
+    iface_module->attributes[uid(RTLIL::escape_id("dynports"))] = RTLIL::Const(1);
     // Note: no src attribute available - interface module is created from parameters only
     
     // Add WIDTH parameter
-    RTLIL::IdString param_id = RTLIL::escape_id("WIDTH");
+    RTLIL::IdString param_id = uid(RTLIL::escape_id("WIDTH"));
     iface_module->avail_parameters(param_id);
     iface_module->parameter_default_values[param_id] = RTLIL::Const(width, 32);
     

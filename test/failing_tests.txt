@@ -468,3 +468,17 @@ proc_continuous_assign_rejected
 # expected outcome (it used to fail with an internal "Clock signal is empty
 # when creating sync rule"; MikePopoloski/slang#1206, #1660).
 always_ff_no_edge_rejected
+
+# --- Yosys 0.71 added two upstream tests on REAL values (tests/simple/) ---
+# real_cond: a REAL parameter as a condition (`localparam real Q = 0.25;
+#   a = Q ? 1 : 0; if (Q) r = i; else r = ~i;`).  A nonzero real is TRUE
+#   (LRM 12.4); read_verilog gives a = 1 and r = i, read_uhdm gives a = 0 and
+#   r = ~i.  Surelog keeps `Q ? 1 : 0` with Q bound to `REAL:0.250000`
+#   (it folds `N = -0.0` to UINT:0 correctly), so the READER truncates the
+#   real to an integer in the boolean context.  A reader defect, to fix.
+simple/real_cond.v
+# real_rtoi: `$rtoi(1.0e20)` into 32 bits -- the real is out of the integer
+#   range, which the LRM leaves undefined (20.5 only says "truncating").
+#   Yosys 0.71 picks the low 32 bits (1661992960), Verilator 0x80000000,
+#   read_uhdm 0.  Three tools, three answers: not a correctness gate.
+simple/real_rtoi.v

@@ -210,7 +210,7 @@ void UhdmImporter::extract_lhs_signals(const expr* lhs_expr, std::vector<Assigne
             auto idx = bit_sel->VpiIndex();
             bool is_const_idx = idx && idx->VpiType() == vpiConstant;
             if (!is_const_idx) {
-                RTLIL::IdString mem_id = RTLIL::escape_id(sig.name);
+                RTLIL::IdString mem_id = uid(RTLIL::escape_id(sig.name));
                 if (!module->memories.count(mem_id) &&
                     expanded_array_low(sig.name) >= 0) {
                     return;
@@ -268,7 +268,7 @@ void UhdmImporter::extract_lhs_signals(const expr* lhs_expr, std::vector<Assigne
             // handed to import_expression that could be fabricated.
             if (sig.name.empty() && !base.empty() && expanded_array_low(base) >= 0 &&
                 !module->wire(RTLIL::escape_id(base)) &&
-                !module->memories.count(RTLIL::escape_id(base))) {
+                !module->memories.count(uid(RTLIL::escape_id(base)))) {
                 RTLIL::SigSpec idx;
                 if (auto ie = dynamic_cast<const expr*>((*vs->Exprs())[0]))
                     idx = import_expression(ie);
@@ -305,7 +305,7 @@ void UhdmImporter::extract_lhs_signals(const expr* lhs_expr, std::vector<Assigne
         RTLIL::Wire* base_w = base.empty() ? nullptr :
             module->wire(RTLIL::escape_id(base));
         bool base_is_wire = base_w != nullptr &&
-            !base_w->attributes.count(RTLIL::escape_id("is_interface"));
+            !base_w->attributes.count(uid(RTLIL::escape_id("is_interface")));
         bool full_is_wire = !full_name.empty() &&
             module->wire(RTLIL::escape_id(full_name)) != nullptr;
         if (full_is_wire && !base_is_wire)
@@ -441,7 +441,7 @@ int UhdmImporter::const_cond_value(const any* cond) {
                     return parse_vpi_value_to_int(v) == 0 ? 0 : 1;
             }
         std::string nm = std::string(r->VpiName());
-        RTLIL::IdString pid = RTLIL::escape_id(nm);
+        RTLIL::IdString pid = uid(RTLIL::escape_id(nm));
         if (module && module->parameter_default_values.count(pid))
             return module->parameter_default_values.at(pid).is_fully_zero() ? 0 : 1;
     }
@@ -910,7 +910,7 @@ void UhdmImporter::extract_assigned_signals(const any* stmt, std::vector<Assigne
                                 }
                             }
                             if (!is_const_idx) {
-                                RTLIL::IdString mem_id = RTLIL::escape_id(sig.name);
+                                RTLIL::IdString mem_id = uid(RTLIL::escape_id(sig.name));
                                 // Indexed by an enclosing for loop's variable
                                 // (`p_reg[j] <= p_reg[j-1]`): the loop is
                                 // unrolled, so each iteration writes ONE element
@@ -1149,8 +1149,8 @@ void UhdmImporter::extract_assigned_signals(const any* stmt, std::vector<Assigne
                             std::string cand = full_name;
                             while (true) {
                                 RTLIL::Wire* w = module->wire(RTLIL::escape_id(cand));
-                                if (w && !w->attributes.count(
-                                             RTLIL::escape_id("is_interface"))) {
+                                if (w && !w->attributes.count(uid(
+                                             RTLIL::escape_id("is_interface")))) {
                                     full_name = cand;
                                     break;
                                 }
@@ -1206,8 +1206,8 @@ void UhdmImporter::extract_assigned_signals(const any* stmt, std::vector<Assigne
                         RTLIL::Wire* base_w = base.empty() ? nullptr :
                             module->wire(RTLIL::escape_id(base));
                         bool base_is_wire = base_w != nullptr &&
-                            !base_w->attributes.count(
-                                RTLIL::escape_id("is_interface"));
+                            !base_w->attributes.count(uid(
+                                RTLIL::escape_id("is_interface")));
                         bool full_is_wire = !full_name.empty() &&
                             module->wire(RTLIL::escape_id(full_name)) != nullptr;
                         // A trailing bit-select with a RUNTIME index
@@ -1258,8 +1258,8 @@ void UhdmImporter::extract_assigned_signals(const any* stmt, std::vector<Assigne
                             std::string chosen, probe = full_name;
                             while (!probe.empty()) {
                                 RTLIL::Wire* w = module->wire(RTLIL::escape_id(probe));
-                                if (w && !w->attributes.count(
-                                             RTLIL::escape_id("is_interface"))) {
+                                if (w && !w->attributes.count(uid(
+                                             RTLIL::escape_id("is_interface")))) {
                                     chosen = probe; break;
                                 }
                                 size_t d = probe.rfind('.');
@@ -2044,16 +2044,16 @@ void UhdmImporter::collect_blocking_assigned_names(const any* stmt, std::set<std
 void UhdmImporter::stamp_mem_unpacked_dims(RTLIL::Memory* mem, const std::vector<int>& sizes,
                                            const std::vector<int>& los) {
     if (!mem || sizes.size() < 2) return;
-    mem->attributes[ID(uhdm_unpacked_dims)] = RTLIL::Const((int)sizes.size());
+    mem->attributes[uid("\\uhdm_unpacked_dims")] = RTLIL::Const((int)sizes.size());
     for (size_t k = 0; k < sizes.size(); k++) {
-        mem->attributes[RTLIL::escape_id(stringf("uhdm_dim_size_%d", (int)k))] = RTLIL::Const(sizes[k]);
-        mem->attributes[RTLIL::escape_id(stringf("uhdm_dim_lo_%d", (int)k))] = RTLIL::Const(los[k]);
+        mem->attributes[uid(RTLIL::escape_id(stringf("uhdm_dim_size_%d", (int)k)))] = RTLIL::Const(sizes[k]);
+        mem->attributes[uid(RTLIL::escape_id(stringf("uhdm_dim_lo_%d", (int)k)))] = RTLIL::Const(los[k]);
     }
 }
 
 int UhdmImporter::mem_unpacked_dims(const RTLIL::Memory* mem) {
     if (!mem) return 1;
-    auto it = mem->attributes.find(ID(uhdm_unpacked_dims));
+    auto it = mem->attributes.find(uid("\\uhdm_unpacked_dims"));
     if (it == mem->attributes.end()) return 1;
     int n = it->second.as_int();
     return n >= 1 ? n : 1;
@@ -2072,8 +2072,8 @@ bool UhdmImporter::mem_linear_address_specs(RTLIL::Memory* mem, const std::vecto
     if (nd < 2 || (int)idx.size() < nd) return false;
     std::vector<int> sizes(nd), los(nd);
     for (int k = 0; k < nd; k++) {
-        auto si = mem->attributes.find(RTLIL::escape_id(stringf("uhdm_dim_size_%d", k)));
-        auto li = mem->attributes.find(RTLIL::escape_id(stringf("uhdm_dim_lo_%d", k)));
+        auto si = mem->attributes.find(uid(RTLIL::escape_id(stringf("uhdm_dim_size_%d", k))));
+        auto li = mem->attributes.find(uid(RTLIL::escape_id(stringf("uhdm_dim_lo_%d", k))));
         if (si == mem->attributes.end() || li == mem->attributes.end()) return false;
         sizes[k] = si->second.as_int();
         los[k] = li->second.as_int();
@@ -2211,7 +2211,7 @@ bool UhdmImporter::parse_mem_partial_select(const UHDM::var_select* vs,
         if (!b.is_fully_const()) return false;
         int outer = 0;
         if (memp) {
-            auto it = memp->attributes.find(ID(packed_outer_dim));
+            auto it = memp->attributes.find(uid("\\packed_outer_dim"));
             if (it != memp->attributes.end()) outer = it->second.as_int();
         }
         if (outer > 1 && mem_word_width > 0 && mem_word_width % outer == 0) {
@@ -2236,7 +2236,7 @@ bool UhdmImporter::parse_mem_partial_select(const UHDM::var_select* vs,
         if (auto memp = module->memories.count(resolve_mem_id(std::string(vs->VpiName())))
                             ? module->memories.at(resolve_mem_id(std::string(vs->VpiName())))
                             : nullptr) {
-            auto it = memp->attributes.find(ID(packed_outer_dim));
+            auto it = memp->attributes.find(uid("\\packed_outer_dim"));
             if (it != memp->attributes.end()) outer = it->second.as_int();
         }
         if (outer <= 0) return false;            // unknown geometry: do not guess
@@ -2309,12 +2309,10 @@ void UhdmImporter::collect_memory_write_lhs(const any* stmt,
                 if (auto lhs = assign->Lhs()) {
                     if (lhs->VpiType() == vpiBitSelect) {
                         const bit_select* bit_sel = any_cast<const bit_select*>(lhs);
-                        out[RTLIL::unescape_id(resolve_mem_id(
-                            std::string(bit_sel->VpiName())))].push_back(lhs);
+                        out[RTLIL::unescape_id(ustr(resolve_mem_id(std::string(bit_sel->VpiName()))))].push_back(lhs);
                     } else if (lhs->VpiType() == vpiVarSelect) {
                         const var_select* vs = any_cast<const var_select*>(lhs);
-                        out[RTLIL::unescape_id(resolve_mem_id(
-                            std::string(vs->VpiName())))].push_back(lhs);
+                        out[RTLIL::unescape_id(ustr(resolve_mem_id(std::string(vs->VpiName()))))].push_back(lhs);
                     }
                 }
             }
@@ -2379,11 +2377,11 @@ void UhdmImporter::scan_for_memory_writes(const any* stmt, std::set<std::string>
                         std::string signal_name = std::string(bit_sel->VpiName());
                         // Key by the name the MEMORY is registered under: in a
                         // generate scope that is `<gen path>.<name>`.
-                        memory_names.insert(RTLIL::unescape_id(resolve_mem_id(signal_name)));
+                        memory_names.insert(RTLIL::unescape_id(ustr(resolve_mem_id(signal_name))));
                     } else if (lhs->VpiType() == vpiVarSelect) {
                         const var_select* vs = any_cast<const var_select*>(lhs);
                         memory_names.insert(RTLIL::unescape_id(
-                            resolve_mem_id(std::string(vs->VpiName()))));
+                            ustr(resolve_mem_id(std::string(vs->VpiName())))));
                     }
                 }
             }
@@ -2493,7 +2491,7 @@ void UhdmImporter::collect_dynamic_expanded_array_writes(
         }
         if (const_idx) return;
         // Expanded array, not a real $memory: a low element wire exists.
-        if (!module->memories.count(RTLIL::escape_id(base)) &&
+        if (!module->memories.count(uid(RTLIL::escape_id(base))) &&
             expanded_array_low(base) >= 0)
             names.insert(base);
     };
@@ -2850,7 +2848,7 @@ bool UhdmImporter::has_only_constant_array_accesses(const std::string& array_nam
                 if (ref) {
                     std::string ref_name = std::string(ref->VpiName());
                     // Check if it's a parameter
-                    if (rtlil_module->parameter_default_values.count(RTLIL::escape_id(ref_name))) {
+                    if (rtlil_module->parameter_default_values.count(uid(RTLIL::escape_id(ref_name)))) {
                         return true;  // Parameters are constant
                     }
                     // A GENVAR is constant too, and is not in

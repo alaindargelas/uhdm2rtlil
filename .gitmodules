@@ -4,14 +4,13 @@
 [submodule "third_party/yosys"]
 	path = third_party/yosys
 	url = https://github.com/alainmarcel/yosys.git
-	# Tracking the alainmarcel fork: v0.70 + the proc_dlatch memoization patch
-	# (branch v0.70-proc-dlatch-memo).  Still NOT upstream as of v0.70, and
-	# v0.70 touched the same functions (it added `active_bits` cycle detection
-	# in find_mux_feedback / find_mux_constant), so the rebase was a real merge:
-	# the memo lookup must stay BEFORE enter_mux_bit and the
-	# active_bits.erase() must stay on every exit path.  Without the
-	# patch, proc_dlatch's un-memoized find_mux_feedback/find_mux_constant DAG
-	# walks are exponential on shared mux subtrees (CVA6 cva6_tlb update_flush
-	# kept proc_dlatch spinning >9h; patched: full-core proc in ~45s).  Also a
-	# candidate for upstreaming to YosysHQ/yosys; when upstream merges it,
-	# revert this url to https://github.com/YosysHQ/yosys.git.
+	# Tracking the alainmarcel fork: v0.71 + the proc_dlatch memoization patch
+	# (branch v0.71-proc-dlatch-memo).  Still NOT upstream as of v0.71
+	# (proposed as YosysHQ/yosys#6521).  v0.70 added `active_bits` cycle
+	# detection and v0.71 `$bwmux` support to find_mux_feedback /
+	# find_mux_constant, so a rebase is a real merge: the memo lookup must stay
+	# BEFORE enter_mux_bit and the active_bits.erase() must stay on every exit
+	# path.  Without the patch, proc_dlatch's un-memoized DAG walks are
+	# exponential on shared mux subtrees (CVA6 cva6_tlb update_flush kept
+	# proc_dlatch spinning >9h; patched: full-core proc in ~45s).  When
+	# upstream merges it, revert this url to https://github.com/YosysHQ/yosys.git.

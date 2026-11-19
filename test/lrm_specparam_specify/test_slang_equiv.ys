@@ -5,6 +5,10 @@ rename dut gold
 design -stash gold
 read_slang  dut.sv --top dut
 hierarchy -check -top dut
+# Since Yosys 0.71 read_slang keeps the specify paths as $specify2/$specify3
+# cells.  They are timing-only (LRM 30) and SAT has no model for them; the
+# logic is what this miter compares, and read_uhdm drops them.
+delete t:$specify2 t:$specify3 t:$specrule
 flatten; proc; opt -fast; async2sync; setundef -undriven -zero
 rename dut gate
 design -stash gate

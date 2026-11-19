@@ -365,8 +365,8 @@ void UhdmMemoryAnalyzer::generate_memory_block(const MemoryInfo& mem_info) {
         log("  Generating RTLIL memory: %s\n", mem_info.name.c_str());
     
     // Create memory object
-    RTLIL::IdString mem_id = RTLIL::escape_id(mem_info.name);
-    RTLIL::Memory *memory = new RTLIL::Memory;
+    RTLIL::IdString mem_id = uid(RTLIL::escape_id(mem_info.name));
+    RTLIL::Memory *memory = new RTLIL::Memory(module);
     memory->name = mem_id;
     memory->width = mem_info.width;
     memory->size = mem_info.size;
@@ -419,7 +419,7 @@ void UhdmMemoryAnalyzer::generate_memory_read_cell(const MemoryAccess& access) {
     // Generate cell name following Yosys pattern: $memrd$<memory>$<location>$<id>
     std::stringstream cell_name_stream;
     cell_name_stream << "$memrd$" << access.memory_name << "$" << access.source_location;
-    std::string cell_name = parent->new_id(cell_name_stream.str()).str();
+    std::string cell_name = ustr(parent->new_id(cell_name_stream.str()));
     
     RTLIL::Cell* read_cell = module->addCell(cell_name, ID($memrd));
     
@@ -500,11 +500,11 @@ RTLIL::IdString UhdmImporter::resolve_mem_id(const std::string& bare_name) {
         for (int i = (int)gen_scope_stack.size() - 1; i >= 0; i--) {
             std::string pp;
             for (int j = 0; j <= i; j++) { if (j) pp += "."; pp += gen_scope_stack[j]; }
-            RTLIL::IdString scoped = RTLIL::escape_id(pp + "." + bare_name);
+            RTLIL::IdString scoped = uid(RTLIL::escape_id(pp + "." + bare_name));
             if (module->memories.count(scoped)) return scoped;
         }
     }
-    return RTLIL::escape_id(bare_name);
+    return uid(RTLIL::escape_id(bare_name));
 }
 
 void UhdmImporter::create_memory_from_array(const array_net* uhdm_array) {
@@ -680,8 +680,8 @@ void UhdmImporter::create_memory_from_array(const array_net* uhdm_array,
 
     force_const_fold = mem_fcf_save;
     // Create RTLIL memory object
-    RTLIL::IdString mem_id = RTLIL::escape_id(array_name);
-    RTLIL::Memory *memory = new RTLIL::Memory;
+    RTLIL::IdString mem_id = uid(RTLIL::escape_id(array_name));
+    RTLIL::Memory *memory = new RTLIL::Memory(module);
     memory->name = mem_id;
     memory->width = width;
     memory->size = size;
@@ -693,7 +693,7 @@ void UhdmImporter::create_memory_from_array(const array_net* uhdm_array,
     // without it the element index has to be dropped, which silently writes
     // every element at element 0's offset.
     if (packed_outer_dim > 1)
-        memory->attributes[ID(packed_outer_dim)] = RTLIL::Const(packed_outer_dim);
+        memory->attributes[uid("\\packed_outer_dim")] = RTLIL::Const(packed_outer_dim);
 
     // Add source attribute
     add_src_attribute(memory->attributes, uhdm_array);
@@ -892,8 +892,8 @@ void UhdmImporter::create_memory_from_array(const array_var* uhdm_array,
 
     force_const_fold = mem_fcf_save;
     // Create RTLIL memory object
-    RTLIL::IdString mem_id = RTLIL::escape_id(array_name);
-    RTLIL::Memory *memory = new RTLIL::Memory;
+    RTLIL::IdString mem_id = uid(RTLIL::escape_id(array_name));
+    RTLIL::Memory *memory = new RTLIL::Memory(module);
     memory->name = mem_id;
     memory->width = width;
     memory->size = size;
@@ -905,7 +905,7 @@ void UhdmImporter::create_memory_from_array(const array_var* uhdm_array,
     // without it the element index has to be dropped, which silently writes
     // every element at element 0's offset.
     if (packed_outer_dim > 1)
-        memory->attributes[ID(packed_outer_dim)] = RTLIL::Const(packed_outer_dim);
+        memory->attributes[uid("\\packed_outer_dim")] = RTLIL::Const(packed_outer_dim);
 
     // Add source attribute
     add_src_attribute(memory->attributes, uhdm_array);
@@ -952,7 +952,7 @@ void UhdmImporter::create_memory_from_array(const array_var* uhdm_array,
                         RTLIL::Cell* cell = module->addCell(
                             stringf("$meminit$\\%s$0", array_name.c_str()),
                             ID($meminit_v2));
-                        cell->setParam(ID::MEMID, RTLIL::Const(mem_id.str()));
+                        cell->setParam(ID::MEMID, RTLIL::Const(ustr(mem_id)));
                         cell->setParam(ID::ABITS, RTLIL::Const(32));
                         cell->setParam(ID::WIDTH, RTLIL::Const(width));
                         cell->setParam(ID::WORDS, RTLIL::Const(size));

@@ -1242,7 +1242,7 @@ RTLIL::Const UhdmImporter::evaluate_single_operand(const any* operand,
             // arrived as the garbage 0 inside `maximum(SUPER_EXP_BITS, ..)`
             // and INT_EXP_WIDTH folded to 9 instead of 12).
             const parameter* param = any_cast<const parameter*>(ref->Actual_group());
-            RTLIL::IdString vpid = RTLIL::escape_id(var_name);
+            RTLIL::IdString vpid = uid(RTLIL::escape_id(var_name));
             if (module && module->parameter_default_values.count(vpid) &&
                 module->parameter_default_values.at(vpid).size() > 0) {
                 return module->parameter_default_values.at(vpid);
@@ -1263,15 +1263,15 @@ RTLIL::Const UhdmImporter::evaluate_single_operand(const any* operand,
                 }
             }
         } else if (module && !ref->Actual_group() &&
-                   module->parameter_default_values.count(RTLIL::escape_id(var_name)) &&
-                   module->parameter_default_values.at(RTLIL::escape_id(var_name)).size() > 0) {
+                   module->parameter_default_values.count(uid(RTLIL::escape_id(var_name))) &&
+                   module->parameter_default_values.at(uid(RTLIL::escape_id(var_name))).size() > 0) {
             // A reference to a MODULE parameter from inside the function
             // body that Surelog left UNBOUND (no vpiActual): `for (int i =
             // 0; i < N; ++i)` in rggen_or_reducer's get_offset_list, where N
             // is the module's own parameter.  The condition folded to 0 and
             // the loop never ran.  The module's imported value is the
             // answer, exactly as for a bound parameter above.
-            val = module->parameter_default_values.at(RTLIL::escape_id(var_name));
+            val = module->parameter_default_values.at(uid(RTLIL::escape_id(var_name)));
         } else {
             // not a local, not a constant: a SIGNAL -- this evaluation is
             // not a compile-time constant (tnoc error_check() reads its
@@ -2351,9 +2351,9 @@ RTLIL::Process* UhdmImporter::generate_function_process(const function* func_def
                         func_call_id.c_str(), io_name.c_str(), incr_autoidx());
                     RTLIL::Wire* temp_wire = module->addWire(RTLIL::escape_id(temp_name), width);
                     if (unp_elem_w > 0) {
-                        temp_wire->attributes[RTLIL::escape_id("unpacked_elem_width")] =
+                        temp_wire->attributes[uid(RTLIL::escape_id("unpacked_elem_width"))] =
                             RTLIL::Const(unp_elem_w, 32);
-                        temp_wire->attributes[RTLIL::escape_id("unpacked_outer_low")] =
+                        temp_wire->attributes[uid(RTLIL::escape_id("unpacked_outer_low"))] =
                             RTLIL::Const(unp_low, 32);
                     }
 
@@ -2649,7 +2649,7 @@ RTLIL::Process* UhdmImporter::generate_function_process(const function* func_def
     RTLIL::Wire* nosync_result = module->wire(RTLIL::escape_id(result_wire_name));
     if (!nosync_result) {
         nosync_result = module->addWire(RTLIL::escape_id(result_wire_name), result_wire->width);
-        nosync_result->attributes[RTLIL::escape_id("\\nosync")] = RTLIL::Const(1);
+        nosync_result->attributes[uid(RTLIL::escape_id("\\nosync"))] = RTLIL::Const(1);
         // Add source attribute
         if (fc) {
             add_src_attribute(nosync_result->attributes, fc);
@@ -2684,7 +2684,7 @@ RTLIL::Process* UhdmImporter::generate_function_process(const function* func_def
             RTLIL::Wire* nosync_wire = module->wire(RTLIL::escape_id(nosync_name));
             if (!nosync_wire) {
                 nosync_wire = module->addWire(RTLIL::escape_id(nosync_name), width);
-                nosync_wire->attributes[RTLIL::escape_id("\\nosync")] = RTLIL::Const(1);
+                nosync_wire->attributes[uid(RTLIL::escape_id("\\nosync"))] = RTLIL::Const(1);
                 // Add source attribute
                 if (fc) {
                     add_src_attribute(nosync_wire->attributes, fc);
@@ -2702,7 +2702,7 @@ RTLIL::Process* UhdmImporter::generate_function_process(const function* func_def
         RTLIL::Wire* nosync_wire = module->wire(RTLIL::escape_id(nosync_name));
         if (!nosync_wire) {
             nosync_wire = module->addWire(RTLIL::escape_id(nosync_name), var_width);
-            nosync_wire->attributes[RTLIL::escape_id("\\nosync")] = RTLIL::Const(1);
+            nosync_wire->attributes[uid(RTLIL::escape_id("\\nosync"))] = RTLIL::Const(1);
             // Add source attribute
             if (fc) {
                 add_src_attribute(nosync_wire->attributes, fc);
@@ -2995,7 +2995,7 @@ void UhdmImporter::scan_for_return_variables(const any* stmt, const std::string&
                             }
                             
                             // Also check module parameters
-                            RTLIL::IdString param_id = RTLIL::escape_id(var_name);
+                            RTLIL::IdString param_id = uid(RTLIL::escape_id(var_name));
                             if (module && module->parameter_default_values.count(param_id)) {
                                 is_parameter = true;
                             }

@@ -3237,7 +3237,7 @@ void UhdmImporter::process_stmt_to_case(const any* stmt, RTLIL::CaseRule* case_r
             }
             case_rule->actions.push_back(RTLIL::SigSig(lhs_sig, rhs_sig));
             if (mode_debug)
-                uhdm_trace("UHDM: return_stmt assigned to result wire %s\n", result_wire->name.c_str());
+                uhdm_trace("UHDM: return_stmt assigned to result wire %s\n", result_wire->name.str().c_str());
         }
         {
             // Mark the return as taken (SSA value — the if/else phi-merge
@@ -3643,7 +3643,7 @@ RTLIL::SigSpec UhdmImporter::import_expression(const expr* uhdm_expr, const std:
                     ~VsInflight() { if (mine) vs_param_inflight.erase(n); }
                 } vs_guard(uhdm_expr);
                 if (vs_guard.mine) {
-                    RTLIL::IdString pid = RTLIL::escape_id(base_name);
+                    RTLIL::IdString pid = uid(RTLIL::escape_id(base_name));
                     // The value: the module's imported parameter -- or, when this
                     // expression is being folded for a child's PARAMOD SIGNATURE
                     // in a throwaway module that has no parameters of its own,
@@ -3814,7 +3814,7 @@ RTLIL::SigSpec UhdmImporter::import_expression(const expr* uhdm_expr, const std:
                         if (addr_expr) {
                             RTLIL::SigSpec addr = lin_addr.empty() ? import_expression(addr_expr, input_mapping) : lin_addr;
                             RTLIL::Cell* memrd_cell = module->addCell(new_id("memrd_" + base_name), ID($memrd));
-                            memrd_cell->setParam(ID::MEMID, RTLIL::Const(mem_id.str()));
+                            memrd_cell->setParam(ID::MEMID, RTLIL::Const(ustr(mem_id)));
                             memrd_cell->setParam(ID::ABITS, GetSize(addr));
                             memrd_cell->setParam(ID::WIDTH, memory->width);
                             memrd_cell->setParam(ID::CLK_ENABLE, RTLIL::Const(0));
@@ -3961,7 +3961,7 @@ RTLIL::SigSpec UhdmImporter::import_expression(const expr* uhdm_expr, const std:
                     }
                     if (par && exprs->size() >= 1 && exprs->size() <= 4) {
                         RTLIL::SigSpec pval;
-                        RTLIL::IdString pid = RTLIL::escape_id(base_name);
+                        RTLIL::IdString pid = uid(RTLIL::escape_id(base_name));
                         if (module && module->parameter_default_values.count(pid))
                             pval = RTLIL::SigSpec(module->parameter_default_values.at(pid));
                         if (pval.empty()) {
@@ -4275,7 +4275,7 @@ RTLIL::SigSpec UhdmImporter::import_expression(const expr* uhdm_expr, const std:
                             if (cok && off >= 0 && off + leaf <= (long long)dw->width) {
                                 log("  vpiVarSelect: %dD typed-elem %s[...] -> %s[%d+:%d]\n",
                                     (int)exprs->size(), base_name.c_str(),
-                                    dw->name.c_str(), (int)off, (int)leaf);
+                                    dw->name.str().c_str(), (int)off, (int)leaf);
                                 return RTLIL::SigSpec(dw).extract((int)off, (int)leaf);
                             }
                         }
@@ -4533,12 +4533,12 @@ RTLIL::SigSpec UhdmImporter::import_expression(const expr* uhdm_expr, const std:
                             auto ew_id = RTLIL::escape_id("packed_elem_width");
                             auto ol_id = RTLIL::escape_id("packed_outer_left");
                             auto or_id = RTLIL::escape_id("packed_outer_right");
-                            if (bw->attributes.count(ew_id) &&
-                                bw->attributes.count(ol_id) &&
-                                bw->attributes.count(or_id)) {
-                                int ew = bw->attributes.at(ew_id).as_int();
-                                int ol = bw->attributes.at(ol_id).as_int();
-                                int orr = bw->attributes.at(or_id).as_int();
+                            if (bw->attributes.count(uid(ew_id)) &&
+                                bw->attributes.count(uid(ol_id)) &&
+                                bw->attributes.count(uid(or_id))) {
+                                int ew = bw->attributes.at(uid(ew_id)).as_int();
+                                int ol = bw->attributes.at(uid(ol_id)).as_int();
+                                int orr = bw->attributes.at(uid(or_id)).as_int();
                                 if (ew > 0 && bw->width % ew == 0 &&
                                     (std::abs(ol - orr) + 1) * ew == bw->width) {
                                     own_dims.push_back({ol, orr});
@@ -4554,8 +4554,8 @@ RTLIL::SigSpec UhdmImporter::import_expression(const expr* uhdm_expr, const std:
                                     // dispatchedSrcRegPtr and shifted by them.
                                     int leaf = 1;
                                     auto lw_id = RTLIL::escape_id("packed_leaf_width");
-                                    if (bw->attributes.count(lw_id))
-                                        leaf = bw->attributes.at(lw_id).as_int();
+                                    if (bw->attributes.count(uid(lw_id)))
+                                        leaf = bw->attributes.at(uid(lw_id)).as_int();
                                     if (leaf > 1 && ew % leaf == 0 && ew / leaf > 1) {
                                         own_dims.push_back({ew / leaf - 1, 0});
                                         own_dims.push_back({leaf - 1, 0});
@@ -4771,10 +4771,10 @@ RTLIL::SigSpec UhdmImporter::import_expression(const expr* uhdm_expr, const std:
                 {
                     RTLIL::Wire* nbw = mapped_base_wire ? mapped_base_wire
                                                         : find_wire_in_scope(base_name);
-                    auto nd_it = nbw ? nbw->attributes.find(RTLIL::escape_id("unpacked_nd_dims"))
+                    auto nd_it = nbw ? nbw->attributes.find(uid(RTLIL::escape_id("unpacked_nd_dims")))
                                      : decltype(nbw->attributes.end()){};
                     if (nbw && nd_it != nbw->attributes.end() &&
-                        nbw->attributes.count(RTLIL::escape_id("unpacked_elem_width"))) {
+                        nbw->attributes.count(uid(RTLIL::escape_id("unpacked_elem_width")))) {
                         std::vector<std::pair<int,int>> nd;   // (size, low)
                         {
                             std::string g = nd_it->second.decode_string(), tok;
@@ -4785,14 +4785,14 @@ RTLIL::SigSpec UhdmImporter::import_expression(const expr* uhdm_expr, const std:
                                 nd.push_back({std::stoi(tok.substr(0, c)), std::stoi(tok.substr(c + 1))});
                             }
                         }
-                        int nd_elem_w = nbw->attributes.at(RTLIL::escape_id("unpacked_elem_width")).as_int();
+                        int nd_elem_w = nbw->attributes.at(uid(RTLIL::escape_id("unpacked_elem_width"))).as_int();
                         size_t K = exprs->size();
                         // One trailing select INSIDE the element (`w[i][j][k][2:0]`,
                         // `w[i][j][k][3]`): resolved against the element's packed
                         // low, and only when import_port knew it.
                         const UHDM::any* tail = nullptr;
                         if (!nd.empty() && K == nd.size() + 1 &&
-                            nbw->attributes.count(RTLIL::escape_id("unpacked_nd_elem_low"))) {
+                            nbw->attributes.count(uid(RTLIL::escape_id("unpacked_nd_elem_low")))) {
                             tail = (*exprs)[K - 1];
                             K--;
                         }
@@ -4807,7 +4807,7 @@ RTLIL::SigSpec UhdmImporter::import_expression(const expr* uhdm_expr, const std:
                         int tail_lo = 0, tail_w = -1;
                         RTLIL::SigSpec tail_dyn;
                         if (plain && tail) {
-                            int elow = nbw->attributes.at(RTLIL::escape_id("unpacked_nd_elem_low")).as_int();
+                            int elow = nbw->attributes.at(uid(RTLIL::escape_id("unpacked_nd_elem_low"))).as_int();
                             if (tail->VpiType() == vpiPartSelect) {
                                 auto ps = any_cast<const UHDM::part_select*>(tail);
                                 RTLIL::SigSpec l = import_expression(ps->Left_range(), input_mapping);
@@ -4830,7 +4830,7 @@ RTLIL::SigSpec UhdmImporter::import_expression(const expr* uhdm_expr, const std:
                         auto apply_tail = [&](RTLIL::SigSpec elem) -> RTLIL::SigSpec {
                             if (!tail) return elem;
                             if (tail_dyn.empty()) return elem.extract(tail_lo, tail_w);
-                            int elow = nbw->attributes.at(RTLIL::escape_id("unpacked_nd_elem_low")).as_int();
+                            int elow = nbw->attributes.at(uid(RTLIL::escape_id("unpacked_nd_elem_low"))).as_int();
                             RTLIL::SigSpec t = tail_dyn;
                             if (t.size() < 32) t.extend_u0(32, false); else if (t.size() > 32) t = t.extract(0, 32);
                             RTLIL::SigSpec rel = module->Sub(NEW_ID, t, RTLIL::Const(elow, 32), true);
@@ -4906,16 +4906,16 @@ RTLIL::SigSpec UhdmImporter::import_expression(const expr* uhdm_expr, const std:
                                                                       : find_wire_in_scope(base_name)) {
                             auto& a = base_wire->attributes;
                             auto have = [&](const char* k){
-                                return a.count(RTLIL::escape_id(k)) > 0;
+                                return a.count(uid(RTLIL::escape_id(k))) > 0;
                             };
                             if (have("unpacked_elem_width") &&
                                 have("unpacked_outer_low") &&
                                 have("unpacked_inner_low") &&
                                 have("unpacked_inner_size")) {
-                                int elem_w     = a.at(RTLIL::escape_id("unpacked_elem_width")).as_int();
-                                int outer_low  = a.at(RTLIL::escape_id("unpacked_outer_low")).as_int();
-                                int inner_low  = a.at(RTLIL::escape_id("unpacked_inner_low")).as_int();
-                                int inner_size = a.at(RTLIL::escape_id("unpacked_inner_size")).as_int();
+                                int elem_w     = a.at(uid(RTLIL::escape_id("unpacked_elem_width"))).as_int();
+                                int outer_low  = a.at(uid(RTLIL::escape_id("unpacked_outer_low"))).as_int();
+                                int inner_low  = a.at(uid(RTLIL::escape_id("unpacked_inner_low"))).as_int();
+                                int inner_size = a.at(uid(RTLIL::escape_id("unpacked_inner_size"))).as_int();
                                 // Two indices into an array with MORE than two
                                 // unpacked dims select a SUB-ARRAY (RSD
                                 // DCacheArray's `.we( dataArrayByteWE[i][way] )`
@@ -4928,7 +4928,7 @@ RTLIL::SigSpec UhdmImporter::import_expression(const expr* uhdm_expr, const std:
                                 // returned ONE bit, and the RAM's second write
                                 // port was tied to 0.
                                 if (have("unpacked_outer_size")) {
-                                    int outer_size = a.at(RTLIL::escape_id("unpacked_outer_size")).as_int();
+                                    int outer_size = a.at(uid(RTLIL::escape_id("unpacked_outer_size"))).as_int();
                                     long cells = (long)outer_size * inner_size;
                                     if (cells > 0 && base_wire->width % cells == 0 &&
                                         base_wire->width / cells > elem_w) {
@@ -4944,7 +4944,7 @@ RTLIL::SigSpec UhdmImporter::import_expression(const expr* uhdm_expr, const std:
                                 if (off >= 0 && off + elem_w <= base_wire->width) {
                                     log("  vpiVarSelect: 2D %s[%d][%d] → %s[%d+:%d]\n",
                                         base_name.c_str(), oi, ii,
-                                        base_wire->name.c_str(), off, elem_w);
+                                        base_wire->name.str().c_str(), off, elem_w);
                                     return RTLIL::SigSpec(base_wire).extract(off, elem_w);
                                 }
                             }
@@ -5135,10 +5135,10 @@ RTLIL::SigSpec UhdmImporter::import_expression(const expr* uhdm_expr, const std:
                         auto ew_id = RTLIL::escape_id("packed_elem_width");
                         auto ol_id = RTLIL::escape_id("packed_outer_left");
                         auto or_id = RTLIL::escape_id("packed_outer_right");
-                        if (wa.count(ew_id) && wa.count(ol_id) && wa.count(or_id)) {
-                            int ew = wa.at(ew_id).as_int();
-                            int ol = wa.at(ol_id).as_int();
-                            int orr = wa.at(or_id).as_int();
+                        if (wa.count(uid(ew_id)) && wa.count(uid(ol_id)) && wa.count(uid(or_id))) {
+                            int ew = wa.at(uid(ew_id)).as_int();
+                            int ol = wa.at(uid(ol_id)).as_int();
+                            int orr = wa.at(uid(or_id)).as_int();
                             if (ew > 1) {
                                 pdims.push_back({std::abs(ol - orr) + 1,
                                                  std::min(ol, orr)});
@@ -5184,7 +5184,7 @@ RTLIL::SigSpec UhdmImporter::import_expression(const expr* uhdm_expr, const std:
                         if (bw) base_sig = RTLIL::SigSpec(bw);
                         else if (pr) {
                             RTLIL::SigSpec pv;
-                            RTLIL::IdString pid = RTLIL::escape_id(base_name);
+                            RTLIL::IdString pid = uid(RTLIL::escape_id(base_name));
                             if (module->parameter_default_values.count(pid))
                                 pv = module->parameter_default_values.at(pid);
                             int saved_ctx = expression_context_width;
@@ -5455,7 +5455,7 @@ RTLIL::SigSpec UhdmImporter::import_expression(const expr* uhdm_expr, const std:
                                     if (bit_off >= 0 && bit_off < bw->width) {
                                         log("  vpiVarSelect: %dD %s[...] → %s[%d]\n",
                                             (int)exprs->size(), base_name.c_str(),
-                                            bw->name.c_str(), bit_off);
+                                            bw->name.str().c_str(), bit_off);
                                         return RTLIL::SigSpec(bw).extract(bit_off, 1);
                                     }
                                 }
@@ -5580,12 +5580,12 @@ RTLIL::SigSpec UhdmImporter::import_expression(const expr* uhdm_expr, const std:
                 if (elem_w == 0 && base_wire) {
                     auto uew_id = RTLIL::escape_id("unpacked_elem_width");
                     auto ulo_id = RTLIL::escape_id("unpacked_outer_low");
-                    if (base_wire->attributes.count(uew_id)) {
-                        int ew = base_wire->attributes.at(uew_id).as_int();
+                    if (base_wire->attributes.count(uid(uew_id))) {
+                        int ew = base_wire->attributes.at(uid(uew_id)).as_int();
                         if (ew > 0 && base_wire->width % ew == 0) {
                             elem_w = ew;
-                            array_low = base_wire->attributes.count(ulo_id)
-                                            ? base_wire->attributes.at(ulo_id).as_int() : 0;
+                            array_low = base_wire->attributes.count(uid(ulo_id))
+                                            ? base_wire->attributes.at(uid(ulo_id)).as_int() : 0;
                         }
                     }
                 }
@@ -5593,12 +5593,12 @@ RTLIL::SigSpec UhdmImporter::import_expression(const expr* uhdm_expr, const std:
                     auto ew_id = RTLIL::escape_id("packed_elem_width");
                     auto ol_id = RTLIL::escape_id("packed_outer_left");
                     auto or_id = RTLIL::escape_id("packed_outer_right");
-                    if (base_wire->attributes.count(ew_id)) {
-                        int ew = base_wire->attributes.at(ew_id).as_int();
-                        int ol = base_wire->attributes.count(ol_id)
-                                     ? base_wire->attributes.at(ol_id).as_int() : 0;
-                        int orr = base_wire->attributes.count(or_id)
-                                      ? base_wire->attributes.at(or_id).as_int() : 0;
+                    if (base_wire->attributes.count(uid(ew_id))) {
+                        int ew = base_wire->attributes.at(uid(ew_id)).as_int();
+                        int ol = base_wire->attributes.count(uid(ol_id))
+                                     ? base_wire->attributes.at(uid(ol_id)).as_int() : 0;
+                        int orr = base_wire->attributes.count(uid(or_id))
+                                      ? base_wire->attributes.at(uid(or_id)).as_int() : 0;
                         if (ew > 0 && base_wire->width % ew == 0) {
                             elem_w = ew;
                             array_low = std::min(ol, orr);
@@ -6236,9 +6236,9 @@ RTLIL::SigSpec UhdmImporter::import_expression(const expr* uhdm_expr, const std:
                 }
                 
                 // Otherwise try to find the wire in the current module
-                RTLIL::IdString wire_id = RTLIL::escape_id(port_name);
+                RTLIL::IdString wire_id = uid(RTLIL::escape_id(port_name));
                 if (module->wire(wire_id)) {
-                    uhdm_trace("    Found wire '%s' for port\n", wire_id.c_str());
+                    uhdm_trace("    Found wire '%s' for port\n", ustr(wire_id).c_str());
                     return RTLIL::SigSpec(module->wire(wire_id));
                 }
                 
@@ -6299,7 +6299,7 @@ RTLIL::SigSpec UhdmImporter::import_expression(const expr* uhdm_expr, const std:
                         int nfound = 0;
                         std::string suffix = "." + vname;
                         for (auto& kv : module->wires_) {
-                            std::string wn = kv.first.str();
+                            std::string wn = ustr(kv.first);
                             if (wn.empty() || wn[0] != '\\') continue;
                             wn = wn.substr(1);
                             if (wn.size() <= suffix.size() ||
@@ -6308,7 +6308,7 @@ RTLIL::SigSpec UhdmImporter::import_expression(const expr* uhdm_expr, const std:
                             std::string pfx = wn.substr(0, wn.size() - suffix.size());
                             if (pfx.find('.') != std::string::npos || pfx.find('[') != std::string::npos) continue;
                             if (!iface_signal_ts_.count(wn) && !iface_signal_struct_ts_.count(wn) &&
-                                !kv.second->attributes.count(RTLIL::escape_id("modport_direction")))
+                                !kv.second->attributes.count(uid(RTLIL::escape_id("modport_direction"))))
                                 continue;
                             only = kv.second; nfound++;
                         }
@@ -6406,7 +6406,7 @@ RTLIL::SigSpec UhdmImporter::import_expression(const expr* uhdm_expr, const std:
                 if (name_map.count(net_name)) {
                     return RTLIL::SigSpec(name_map.at(net_name));
                 } else {
-                    RTLIL::IdString wire_id = RTLIL::escape_id(net_name);
+                    RTLIL::IdString wire_id = uid(RTLIL::escape_id(net_name));
                     if (module->wire(wire_id)) {
                         return RTLIL::SigSpec(module->wire(wire_id));
                     }
@@ -7511,7 +7511,7 @@ RTLIL::SigSpec UhdmImporter::import_expression(const expr* uhdm_expr, const std:
                     // Apply any module-level bit-select side effects collected during
                     // compile-time evaluation (e.g. "out6[exp] = base & 1").
                     for (auto& [sig_name, bit_vals] : const_eval_module_writes) {
-                        RTLIL::IdString wid = RTLIL::escape_id(sig_name);
+                        RTLIL::IdString wid = uid(RTLIL::escape_id(sig_name));
                         RTLIL::Wire* tw = module->wire(wid);
                         if (!tw && name_map.count(sig_name))
                             tw = name_map.at(sig_name);
@@ -10217,8 +10217,8 @@ RTLIL::SigSpec UhdmImporter::import_operation(const operation* uhdm_op, const UH
                         [&](const UHDM::any* c) -> bool {
                             if (!c) return false;
                             if (c->VpiType() == vpiRefObj) {
-                                if (module->parameter_default_values.count(
-                                        RTLIL::escape_id(std::string(c->VpiName()))))
+                                if (module->parameter_default_values.count(uid(
+                                        RTLIL::escape_id(std::string(c->VpiName())))))
                                     return true;
                                 auto ro = any_cast<const ref_obj*>(c);
                                 const UHDM::any* ag = ro->Actual_group();
@@ -11220,7 +11220,7 @@ RTLIL::SigSpec UhdmImporter::import_operation(const operation* uhdm_op, const UH
                 
                 uhdm_trace("UHDM: import_operation creating logic_not cell with name: %s (gen_scope=%s)\n", 
                     cell_name_str.c_str(), get_current_gen_scope().c_str());
-                RTLIL::IdString cell_name = RTLIL::escape_id(cell_name_str);
+                RTLIL::IdString cell_name = uid(RTLIL::escape_id(cell_name_str));
                 RTLIL::Cell* not_cell = module->addCell(cell_name, ID($logic_not));
                 not_cell->setParam(ID::A_SIGNED, 0);
                 not_cell->setParam(ID::A_WIDTH, operands[0].size());
@@ -11229,7 +11229,7 @@ RTLIL::SigSpec UhdmImporter::import_operation(const operation* uhdm_op, const UH
                 
                 // Create output wire with source-based name
                 std::string wire_name_str = cell_name_str + "_Y";
-                RTLIL::IdString wire_name = RTLIL::escape_id(wire_name_str);
+                RTLIL::IdString wire_name = uid(RTLIL::escape_id(wire_name_str));
                 RTLIL::Wire* output_wire = module->addWire(wire_name, 1);
                 add_src_attribute(output_wire->attributes, uhdm_op);
 
@@ -11890,7 +11890,7 @@ RTLIL::SigSpec UhdmImporter::import_operation(const operation* uhdm_op, const UH
                                      op_type == vpiLeOp ? "le" :
                                      op_type == vpiGtOp ? "gt" : "ge";
                     std::string cell_name = generate_cell_name(uhdm_op, nm);
-                    RTLIL::IdString cid = RTLIL::escape_id(cell_name);
+                    RTLIL::IdString cid = uid(RTLIL::escape_id(cell_name));
                     switch (op_type) {
                         case vpiLtOp: return module->Lt(cid, operands[0], operands[1], cmp_signed);
                         case vpiLeOp: return module->Le(cid, operands[0], operands[1], cmp_signed);
@@ -12270,7 +12270,7 @@ RTLIL::SigSpec UhdmImporter::import_operation(const operation* uhdm_op, const UH
                         if (target_width <= 0 && !ts->VpiName().empty()) {
                             std::string tn = std::string(ts->VpiName());
                             int w = 0;
-                            RTLIL::IdString pid = RTLIL::escape_id(tn);
+                            RTLIL::IdString pid = uid(RTLIL::escape_id(tn));
                             if (module && module->parameter_default_values.count(pid)) {
                                 RTLIL::Const& pv = module->parameter_default_values.at(pid);
                                 if (pv.size() > 0) w = pv.as_int();
@@ -12544,7 +12544,7 @@ RTLIL::Wire* UhdmImporter::find_wire_in_scope(const std::string& signal_name, co
     }
     
     // Finally, try with escaped name in module
-    RTLIL::IdString wire_id = RTLIL::escape_id(signal_name);
+    RTLIL::IdString wire_id = uid(RTLIL::escape_id(signal_name));
     RTLIL::Wire* wire = module->wire(wire_id);
     if (wire && !context_for_log.empty()) {
         uhdm_trace("UHDM: Found wire %s via module->wire for %s\n", signal_name.c_str(), context_for_log.c_str());
@@ -12986,7 +12986,7 @@ RTLIL::SigSpec UhdmImporter::import_ref_obj(const ref_obj* uhdm_ref, const UHDM:
             
             uhdm_trace("UHDM: Function parameter %s mapped to signal %s\n",
                 ref_name.c_str(), it->second.is_wire() ?
-                it->second.as_wire()->name.c_str() : "const/temp");
+                it->second.as_wire()->name.str().c_str() : "const/temp");
             return mapped_inflight(it->second);
         }
     }
@@ -13142,10 +13142,10 @@ RTLIL::SigSpec UhdmImporter::import_ref_obj(const ref_obj* uhdm_ref, const UHDM:
         }
         
         // Try with escaped name
-        RTLIL::IdString wire_id = RTLIL::escape_id(actual_name);
+        RTLIL::IdString wire_id = uid(RTLIL::escape_id(actual_name));
         if (module->wire(wire_id)) {
             if (mode_debug)
-                uhdm_trace("    Found actual signal as module wire: %s\n", wire_id.c_str());
+                uhdm_trace("    Found actual signal as module wire: %s\n", ustr(wire_id).c_str());
             return RTLIL::SigSpec(module->wire(wire_id));
         }
     }
@@ -13256,7 +13256,7 @@ RTLIL::SigSpec UhdmImporter::import_ref_obj(const ref_obj* uhdm_ref, const UHDM:
             // For parameterized modules, prefer the module's actual parameter value
             // over the base module's VpiValue (which may be the unelaborated default)
             RTLIL::Const param_value;
-            RTLIL::IdString p_id = RTLIL::escape_id(param_name);
+            RTLIL::IdString p_id = uid(RTLIL::escape_id(param_name));
             // `module` is null when importing a PACKAGE parameter's value
             // expression (no RTLIL module context) — guard the lookup, else a
             // package parameter that references another parameter segfaults
@@ -13602,7 +13602,7 @@ RTLIL::SigSpec UhdmImporter::import_ref_obj(const ref_obj* uhdm_ref, const UHDM:
     }
 
     // Check if this is a parameter reference
-    RTLIL::IdString param_id = RTLIL::escape_id(ref_name);
+    RTLIL::IdString param_id = uid(RTLIL::escape_id(ref_name));
     if (module->parameter_default_values.count(param_id)) {
         RTLIL::Const param_value = module->parameter_default_values.at(param_id);
         if (mode_debug)
@@ -13674,7 +13674,7 @@ RTLIL::SigSpec UhdmImporter::import_ref_obj(const ref_obj* uhdm_ref, const UHDM:
     // Skip this check if we're in a generate scope to avoid finding global wires
     // when we should be using generate-local wires
     if (module && gen_scope.empty()) {
-        RTLIL::IdString wire_id = RTLIL::escape_id(ref_name);
+        RTLIL::IdString wire_id = uid(RTLIL::escape_id(ref_name));
         if (RTLIL::Wire* existing_wire = module->wire(wire_id)) {
             uhdm_trace("UHDM: Found existing wire %s in module\n", ref_name.c_str());
             // Add to name_map for future lookups
@@ -13737,12 +13737,12 @@ RTLIL::SigSpec UhdmImporter::import_ref_obj(const ref_obj* uhdm_ref, const UHDM:
     
     // Check if this is a reference to an interface instance
     // Interface instances would have been created as cells in the module
-    RTLIL::IdString potential_interface_name = RTLIL::escape_id(ref_name);
+    RTLIL::IdString potential_interface_name = uid(RTLIL::escape_id(ref_name));
     if (module && module->cell(potential_interface_name)) {
         RTLIL::Cell* potential_interface_cell = module->cell(potential_interface_name);
         // Check if the cell type indicates it's an interface
         RTLIL::Module* cell_module = design->module(potential_interface_cell->type);
-        if (cell_module && cell_module->attributes.count(RTLIL::escape_id("is_interface"))) {
+        if (cell_module && cell_module->attributes.count(uid(RTLIL::escape_id("is_interface")))) {
             // This is a reference to an interface instance
             // Create the interface connection wire with proper naming
             std::string interface_wire_name = "$dummywireforinterface\\" + ref_name;
@@ -13995,7 +13995,7 @@ RTLIL::SigSpec UhdmImporter::import_ref_obj(const ref_obj* uhdm_ref, const UHDM:
     
     // Add to name_map with both hierarchical and simple names for future lookups
     if (!gen_scope.empty() && module) {
-        RTLIL::IdString wire_id = RTLIL::escape_id(wire_name);
+        RTLIL::IdString wire_id = uid(RTLIL::escape_id(wire_name));
         if (RTLIL::Wire* created_wire = module->wire(wire_id)) {
             name_map[wire_name] = created_wire;  // Hierarchical name
             // Don't map simple name to avoid conflicts with other generate instances
@@ -14169,7 +14169,7 @@ RTLIL::SigSpec UhdmImporter::import_part_select(const part_select* uhdm_part, co
             // for a parameterized module is the unelaborated default — same rule
             // as import_ref_obj.  Only fall back to VpiValue for a gen-scope
             // genvar (not a module parameter, so absent from the map).
-            RTLIL::IdString p_id = RTLIL::escape_id(std::string(p->VpiName()));
+            RTLIL::IdString p_id = uid(RTLIL::escape_id(std::string(p->VpiName())));
             if (module->parameter_default_values.count(p_id)) {
                 base = RTLIL::SigSpec(module->parameter_default_values.at(p_id));
                 uhdm_trace("      PartSelect: base '%s' from module parameter (width=%d)\n",
@@ -14213,7 +14213,7 @@ RTLIL::SigSpec UhdmImporter::import_part_select(const part_select* uhdm_part, co
             // the element-0 write then double-drove the flat wire (32 driver
             // conflicts on every rp32 SoC).  Packed arrays keep their own
             // packed_elem_width path further down.
-            if (!wire->attributes.count(RTLIL::escape_id("packed_elem_width"))) {
+            if (!wire->attributes.count(uid(RTLIL::escape_id("packed_elem_width")))) {
                 int alow = expanded_array_low(base_signal_name);
                 RTLIL::Wire* e0 = nullptr;
                 if (alow >= 0) {
@@ -14265,7 +14265,7 @@ RTLIL::SigSpec UhdmImporter::import_part_select(const part_select* uhdm_part, co
             }
         } else {
             // Try as a parameter (e.g., OUTPUT[15:8] where OUTPUT is a parameter)
-            RTLIL::IdString param_id = RTLIL::escape_id(base_signal_name);
+            RTLIL::IdString param_id = uid(RTLIL::escape_id(base_signal_name));
             if (module->parameter_default_values.count(param_id)) {
                 base = RTLIL::SigSpec(module->parameter_default_values.at(param_id));
                 uhdm_trace("      Resolved '%s' as parameter for part select (width=%d)\n",
@@ -14562,11 +14562,11 @@ RTLIL::SigSpec UhdmImporter::import_part_select(const part_select* uhdm_part, co
             auto ew_id = RTLIL::escape_id("packed_elem_width");
             auto ol_id = RTLIL::escape_id("packed_outer_left");
             auto or_id = RTLIL::escape_id("packed_outer_right");
-            if (bw && bw->attributes.count(ew_id) &&
-                bw->attributes.count(ol_id) && bw->attributes.count(or_id)) {
-                int ew = bw->attributes.at(ew_id).as_int();
-                int ol = bw->attributes.at(ol_id).as_int();
-                int orr = bw->attributes.at(or_id).as_int();
+            if (bw && bw->attributes.count(uid(ew_id)) &&
+                bw->attributes.count(uid(ol_id)) && bw->attributes.count(uid(or_id))) {
+                int ew = bw->attributes.at(uid(ew_id)).as_int();
+                int ol = bw->attributes.at(uid(ol_id)).as_int();
+                int orr = bw->attributes.at(uid(or_id)).as_int();
                 int decl_low = std::min(ol, orr), decl_high = std::max(ol, orr);
                 int nelem = decl_high - decl_low + 1;
                 int ilo = std::min(left, right), ihi = std::max(left, right);
@@ -14885,11 +14885,11 @@ RTLIL::SigSpec UhdmImporter::import_bit_select_inner(const bit_select* uhdm_bit,
         
         // Create a unique name for the cell
         RTLIL::IdString cell_id = new_id("memrd_" + signal_name);
-        std::string cell_name = cell_id.str();
+        std::string cell_name = ustr(cell_id);
         
         // Create $memrd cell
         RTLIL::Cell* memrd_cell = module->addCell(cell_id, ID($memrd));
-        memrd_cell->setParam(ID::MEMID, RTLIL::Const(mem_id.str()));
+        memrd_cell->setParam(ID::MEMID, RTLIL::Const(ustr(mem_id)));
         memrd_cell->setParam(ID::ABITS, GetSize(addr));
         memrd_cell->setParam(ID::WIDTH, memory->width);
         memrd_cell->setParam(ID::CLK_ENABLE, RTLIL::Const(0));
@@ -14902,7 +14902,7 @@ RTLIL::SigSpec UhdmImporter::import_bit_select_inner(const bit_select* uhdm_bit,
         
         if (mode_debug) {
             uhdm_trace("    Created memrd cell: %s\n", cell_name.c_str());
-            uhdm_trace("    Created data wire: %s\n", data_wire_id.c_str());
+            uhdm_trace("    Created data wire: %s\n", ustr(data_wire_id).c_str());
         }
         
         // Connect ports
@@ -15167,7 +15167,7 @@ RTLIL::SigSpec UhdmImporter::import_bit_select_inner(const bit_select* uhdm_bit,
             // reeval_stamped_param_assign has already corrected in
             // parameter_default_values (stamped_gen_param's UT[k] reads).
             {
-                RTLIL::IdString p_id = RTLIL::escape_id(signal_name);
+                RTLIL::IdString p_id = uid(RTLIL::escape_id(signal_name));
                 if (module && module->parameter_default_values.count(p_id) &&
                     module->parameter_default_values.at(p_id).size() > 1) {
                     param_value = module->parameter_default_values.at(p_id);
@@ -15674,8 +15674,8 @@ RTLIL::SigSpec UhdmImporter::import_bit_select_inner(const bit_select* uhdm_bit,
                 signal_name.c_str(),
                 ag ? UHDM::UhdmName(ag->UhdmType()).c_str() : "null",
                 ci_kind, ci_name.c_str(),
-                module ? module->name.c_str() : "null",
-                module ? (int)module->parameter_default_values.count(RTLIL::escape_id(signal_name)) : -1);
+                module ? module->name.str().c_str() : "null",
+                module ? (int)module->parameter_default_values.count(uid(RTLIL::escape_id(signal_name))) : -1);
             log_flush();
         }
         log_error("Could not find wire '%s' for bit select\n", signal_name.c_str());
@@ -15728,10 +15728,10 @@ RTLIL::SigSpec UhdmImporter::import_bit_select_inner(const bit_select* uhdm_bit,
     // with constant `i` inside a static-unrolled loop).
     int packed_elem_w = 1;
     int packed_outer_l = -1, packed_outer_r = -1;
-    if (wire && wire->attributes.count(RTLIL::escape_id("packed_elem_width"))) {
-        packed_elem_w = wire->attributes.at(RTLIL::escape_id("packed_elem_width")).as_int();
-        packed_outer_l = wire->attributes.at(RTLIL::escape_id("packed_outer_left")).as_int();
-        packed_outer_r = wire->attributes.at(RTLIL::escape_id("packed_outer_right")).as_int();
+    if (wire && wire->attributes.count(uid(RTLIL::escape_id("packed_elem_width")))) {
+        packed_elem_w = wire->attributes.at(uid(RTLIL::escape_id("packed_elem_width"))).as_int();
+        packed_outer_l = wire->attributes.at(uid(RTLIL::escape_id("packed_outer_left"))).as_int();
+        packed_outer_r = wire->attributes.at(uid(RTLIL::escape_id("packed_outer_right"))).as_int();
     }
     // Packed array of a (packed) struct/enum: `filter_ctl_t [1:0] a` is a
     // packed_array_var whose flat wire carries no packed_elem_width attribute, so
@@ -16053,10 +16053,10 @@ RTLIL::SigSpec UhdmImporter::import_bit_select_inner(const bit_select* uhdm_bit,
     // instead of the reset fill, 293 diverging co-sim cycles).
     if (packed_elem_w <= 1 && wire) {
         auto& wa = wire->attributes;
-        auto has = [&](const char* k) { return wa.count(RTLIL::escape_id(k)) > 0; };
+        auto has = [&](const char* k) { return wa.count(uid(RTLIL::escape_id(k))) > 0; };
         if (has("unpacked_outer_size") && has("unpacked_outer_low") && has("unpacked_inner_size")) {
-            int osz = wa.at(RTLIL::escape_id("unpacked_outer_size")).as_int();
-            int olow = wa.at(RTLIL::escape_id("unpacked_outer_low")).as_int();
+            int osz = wa.at(uid(RTLIL::escape_id("unpacked_outer_size"))).as_int();
+            int olow = wa.at(uid(RTLIL::escape_id("unpacked_outer_low"))).as_int();
             if (osz > 0 && base.size() % osz == 0 && base.size() / osz > 1) {
                 packed_elem_w = base.size() / osz;
                 packed_outer_l = olow + osz - 1;
@@ -16687,7 +16687,7 @@ RTLIL::SigSpec UhdmImporter::import_indexed_part_select(const indexed_part_selec
                 base = unp_arr;
             } else {
                 // Try as a parameter (e.g., OUTPUT[15:8] where OUTPUT is a parameter)
-                RTLIL::IdString param_id = RTLIL::escape_id(base_signal_name);
+                RTLIL::IdString param_id = uid(RTLIL::escape_id(base_signal_name));
                 if (module->parameter_default_values.count(param_id)) {
                     base = RTLIL::SigSpec(module->parameter_default_values.at(param_id));
                     base_is_param = true;
@@ -16804,9 +16804,9 @@ RTLIL::SigSpec UhdmImporter::import_indexed_part_select(const indexed_part_selec
         auto ew_id = RTLIL::escape_id("packed_elem_width");
         auto ol_id = RTLIL::escape_id("packed_outer_left");
         auto or_id = RTLIL::escape_id("packed_outer_right");
-        if (ga.count(ew_id) && ga.count(ol_id) && ga.count(or_id)) {
-            int ew = ga.at(ew_id).as_int();
-            int ol = ga.at(ol_id).as_int(), orr = ga.at(or_id).as_int();
+        if (ga.count(uid(ew_id)) && ga.count(uid(ol_id)) && ga.count(uid(or_id))) {
+            int ew = ga.at(uid(ew_id)).as_int();
+            int ol = ga.at(uid(ol_id)).as_int(), orr = ga.at(uid(or_id)).as_int();
             int nelem = std::abs(ol - orr) + 1;
             if (ew > 1 && ew * nelem == base.size()) {
                 pk_ew = ew; pk_ol = ol; pk_or = orr;
@@ -17082,13 +17082,13 @@ void UhdmImporter::resolve_xmr_read(RTLIL::Module* mod, RTLIL::Cell* cell, const
     std::string pn = inst + "." + sig;
     RTLIL::Wire* pw = mod->wire(RTLIL::escape_id(pn));
     if (!pw) pw = mod->addWire(RTLIL::escape_id(pn), cw->width);
-    if (cell->hasPort(RTLIL::escape_id(sig))) {
+    if (cell->hasPort(uid(RTLIL::escape_id(sig)))) {
         // The port is already a real connection (an output used elsewhere, e.g.
         // ibex_counter.counter_val_o driving cs_registers, or controller.
         // id_exception_o).  Don't add a second connection — that would leave the
         // reader wire undriven.  Alias the reader to the net the port already
         // drives so it carries the same value.
-        RTLIL::SigSpec existing = cell->getPort(RTLIL::escape_id(sig));
+        RTLIL::SigSpec existing = cell->getPort(uid(RTLIL::escape_id(sig)));
         if (existing.size() == pw->width && existing != RTLIL::SigSpec(pw))
             mod->connect(RTLIL::SigSpec(pw), existing);
     } else {
@@ -17135,7 +17135,7 @@ RTLIL::Wire* UhdmImporter::resolve_xmr_write(RTLIL::Module* mod, RTLIL::Cell* ce
     std::string pn = inst + "." + sig;
     RTLIL::Wire* pw = mod->wire(RTLIL::escape_id(pn));
     if (!pw) pw = mod->addWire(RTLIL::escape_id(pn), cw->width);
-    if (!cell->hasPort(RTLIL::escape_id(sig)))
+    if (!cell->hasPort(uid(RTLIL::escape_id(sig))))
         cell->setPort(RTLIL::escape_id(sig), pw);
     return pw;
 }
@@ -18524,7 +18524,7 @@ RTLIL::SigSpec UhdmImporter::import_hier_path(const hier_path* uhdm_hier, const 
             bool unpacked_member = iface_array_elem_width_.count(full) || name_map.count(full + "[0]") ||
                                    module->wire(RTLIL::escape_id(full + "[0]"));
             const UHDM::any* decl = unpacked_member ? nullptr : iface_port_member_decl(base, mem);
-            bool is_iface_port = decl || (pw && pw->attributes.count(RTLIL::escape_id("is_interface")));
+            bool is_iface_port = decl || (pw && pw->attributes.count(uid(RTLIL::escape_id("is_interface"))));
             if (!inst_actual && !unpacked_member && is_iface_port) {
                 RTLIL::Wire* w = name_map.count(full) ? name_map[full] : module->wire(RTLIL::escape_id(full));
                 if (!decl) decl = bs1->Actual_group();
@@ -18577,7 +18577,7 @@ RTLIL::SigSpec UhdmImporter::import_hier_path(const hier_path* uhdm_hier, const 
                 std::string mw = elem + "." + mem;
                 RTLIL::Wire* w = find_wire_in_scope(mw, "interface-array element member select");
                 if (w && (iface_inst_vars_.count(elem) ||
-                          w->attributes.count(RTLIL::escape_id("interface_member")) ||
+                          w->attributes.count(uid(RTLIL::escape_id("interface_member"))) ||
                           (b0->Actual_group() &&
                            (b0->Actual_group()->UhdmType() == uhdminterface_array ||
                             b0->Actual_group()->UhdmType() == uhdminterface_inst)) ||
@@ -18590,7 +18590,7 @@ RTLIL::SigSpec UhdmImporter::import_hier_path(const hier_path* uhdm_hier, const 
                     base_map[mem] = (!comb_lhs_keep_base && input_mapping && input_mapping->count(mw))
                         ? input_mapping->at(mw) : RTLIL::SigSpec(w);
                     uhdm_trace("    hier_path: interface-array element member select %s -> base wire %s\n",
-                        path_name.c_str(), w->name.c_str());
+                        path_name.c_str(), w->name.str().c_str());
                     // A CONSTANT select is sliced right here.  Handing the
                     // wire to import_bit_select through input_mapping keyed
                     // by the member name is not enough when the enclosing
@@ -18784,7 +18784,7 @@ RTLIL::SigSpec UhdmImporter::import_hier_path(const hier_path* uhdm_hier, const 
                     if (input_mapping) base_map = *input_mapping;
                     base_map[mem] = RTLIL::SigSpec(w);
                     uhdm_trace("    hier_path: interface member select %s -> base wire %s\n",
-                        path_name.c_str(), w->name.c_str());
+                        path_name.c_str(), w->name.str().c_str());
                     // Mark the base as authoritative for the delegated
                     // select: `mem` may also name a module-level local, and a
                     // by-name lookup would answer with that instead (VeeR EL2
@@ -19231,8 +19231,8 @@ RTLIL::SigSpec UhdmImporter::import_hier_path(const hier_path* uhdm_hier, const 
                 }
                 std::string iface_def_name;
                 if (auto pw = module->wire(RTLIL::escape_id(mc_prefix)))
-                    if (pw->attributes.count(RTLIL::escape_id("interface_type"))) {
-                        iface_def_name = pw->attributes.at(RTLIL::escape_id("interface_type")).decode_string();
+                    if (pw->attributes.count(uid(RTLIL::escape_id("interface_type")))) {
+                        iface_def_name = pw->attributes.at(uid(RTLIL::escape_id("interface_type"))).decode_string();
                         if (!iface_def_name.empty() && iface_def_name[0] == '\\') iface_def_name = iface_def_name.substr(1);
                         auto bs = iface_def_name.find("\\");   // a $paramod name: keep the bare interface name
                         if (iface_def_name.compare(0, 8, "$paramod") == 0 && bs != std::string::npos) {
@@ -20080,7 +20080,7 @@ RTLIL::SigSpec UhdmImporter::import_hier_path(const hier_path* uhdm_hier, const 
                         if (mode_debug)
                             uhdm_trace("    hier_path %s[%d].%s[%d:%d] -> %s[%d +: %d]\n",
                                 base_name.c_str(), idx, field_name.c_str(), hi, lo,
-                                base_wire->name.c_str(), off, w);
+                                base_wire->name.str().c_str(), off, w);
                         return RTLIL::SigSpec(base_wire, off, w);
                     }
                 }
@@ -20260,7 +20260,7 @@ RTLIL::SigSpec UhdmImporter::import_hier_path(const hier_path* uhdm_hier, const 
                     if (found_field && field_w > 0 && total + field_w <= base_wire->width) {
                         uhdm_trace("    hier_path: %s.%s[%d].%s -> %s[%d+:%d]\n",
                             base_name.c_str(), member_name.c_str(), idx,
-                            field_name.c_str(), base_wire->name.c_str(), total, field_w);
+                            field_name.c_str(), base_wire->name.str().c_str(), total, field_w);
                         return RTLIL::SigSpec(base_wire).extract(total, field_w);
                     }
                 }
@@ -20375,7 +20375,7 @@ RTLIL::SigSpec UhdmImporter::import_hier_path(const hier_path* uhdm_hier, const 
             if (flat && low < 0) {
                 low = 0;
                 auto lo_id = RTLIL::escape_id("unpacked_outer_low");
-                if (flat->attributes.count(lo_id)) low = flat->attributes.at(lo_id).as_int();
+                if (flat->attributes.count(uid(lo_id))) low = flat->attributes.at(uid(lo_id)).as_int();
                 else {
                     // A PACKED struct array declared with a non-zero low
                     // bound -- black-parrot's `bp_mem_ready_and_link_s [E:W]`
@@ -20386,9 +20386,9 @@ RTLIL::SigSpec UhdmImporter::import_hier_path(const hier_path* uhdm_hier, const 
                     // links were all zero.
                     auto pl_id = RTLIL::escape_id("packed_outer_left");
                     auto pr_id = RTLIL::escape_id("packed_outer_right");
-                    if (flat->attributes.count(pl_id) && flat->attributes.count(pr_id)) {
-                        int pl = flat->attributes.at(pl_id).as_int();
-                        int pr = flat->attributes.at(pr_id).as_int();
+                    if (flat->attributes.count(uid(pl_id)) && flat->attributes.count(uid(pr_id))) {
+                        int pl = flat->attributes.at(uid(pl_id)).as_int();
+                        int pr = flat->attributes.at(uid(pr_id)).as_int();
                         low = std::min(pl, pr);
                         ea_asc = pl < pr;
                     }
@@ -20608,7 +20608,7 @@ RTLIL::SigSpec UhdmImporter::import_hier_path(const hier_path* uhdm_hier, const 
                     : module->wire(RTLIL::escape_id(wname));
                 if (w) {
                     uhdm_trace("    hier_path: interface-array element field %s -> wire %s\n",
-                        wname.c_str(), w->name.c_str());
+                        wname.c_str(), w->name.str().c_str());
                     return RTLIL::SigSpec(w);
                 }
             }
@@ -20973,7 +20973,7 @@ RTLIL::SigSpec UhdmImporter::import_hier_path(const hier_path* uhdm_hier, const 
                         off + bit_lo + sw <= base_wire->width) {
                         uhdm_trace("    hier_path: packed-struct %s.%s[%d:%d] (elem_w=%d) -> %s[%d+:%d]\n",
                             base.c_str(), field.c_str(), l, r, elem_w,
-                            base_wire->name.c_str(), off + bit_lo, sw);
+                            base_wire->name.str().c_str(), off + bit_lo, sw);
                         return RTLIL::SigSpec(base_wire).extract(off + bit_lo, sw);
                     }
                 }
@@ -21002,7 +21002,7 @@ RTLIL::SigSpec UhdmImporter::import_hier_path(const hier_path* uhdm_hier, const 
                 auto it = name_map.find(full);
                 if (it != name_map.end()) {
                     uhdm_trace("    hier_path: resolved %s → %s via name_map\n",
-                        full.c_str(), it->second->name.c_str());
+                        full.c_str(), it->second->name.str().c_str());
                     return RTLIL::SigSpec(it->second);
                 }
 
@@ -21022,7 +21022,7 @@ RTLIL::SigSpec UhdmImporter::import_hier_path(const hier_path* uhdm_hier, const 
                         // Prefer the already-resolved value: param_assigns are
                         // processed in declaration order, so a struct param
                         // `Info` is resolved before `NumScrmblBlocks = Info.x`.
-                        RTLIL::IdString pid = RTLIL::escape_id(base);
+                        RTLIL::IdString pid = uid(RTLIL::escape_id(base));
                         if (module && module->parameter_default_values.count(pid))
                             pval = RTLIL::SigSpec(module->parameter_default_values.at(pid));
                         // Package parameter (`some_package::LovingHome.bunn1_t`):
@@ -21079,7 +21079,7 @@ RTLIL::SigSpec UhdmImporter::import_hier_path(const hier_path* uhdm_hier, const 
                             if (calculate_struct_member_offset(ats, field, inst, off, w) &&
                                 w > 0 && off + w <= base_wire->width) {
                                 uhdm_trace("    hier_path: packed-struct %s → %s[%d+:%d]\n",
-                                    full.c_str(), base_wire->name.c_str(), off, w);
+                                    full.c_str(), base_wire->name.str().c_str(), off, w);
                                 return RTLIL::SigSpec(base_wire).extract(off, w);
                             }
                         }
@@ -21111,9 +21111,9 @@ RTLIL::SigSpec UhdmImporter::import_hier_path(const hier_path* uhdm_hier, const 
                     // `\interface_type` attribute to pick the interface.
                     std::string iface_name;
                     if (auto port_wire = module->wire(RTLIL::escape_id(base))) {
-                        if (port_wire->attributes.count(RTLIL::escape_id("interface_type"))) {
-                            iface_name = port_wire->attributes.at(
-                                RTLIL::escape_id("interface_type")).decode_string();
+                        if (port_wire->attributes.count(uid(RTLIL::escape_id("interface_type")))) {
+                            iface_name = port_wire->attributes.at(uid(
+                                RTLIL::escape_id("interface_type"))).decode_string();
                             if (!iface_name.empty() && iface_name[0] == '\\')
                                 iface_name = iface_name.substr(1);
                         }
@@ -21723,7 +21723,7 @@ RTLIL::SigSpec UhdmImporter::import_hier_path(const hier_path* uhdm_hier, const 
                             }
                             uhdm_trace("          Extracted signal path: %s\n", signal_path.c_str());
                             if (name_map.count(signal_path)) {
-                                uhdm_trace("          Found in name_map, resolving to: %s\n", name_map[signal_path]->name.c_str());
+                                uhdm_trace("          Found in name_map, resolving to: %s\n", name_map[signal_path]->name.str().c_str());
                                 return RTLIL::SigSpec(name_map[signal_path]);
                             } else if (!name_map.count(path_name)) {
                                 // Wire not yet created and hier_path name also absent —
@@ -21770,7 +21770,7 @@ RTLIL::SigSpec UhdmImporter::import_hier_path(const hier_path* uhdm_hier, const 
                             uhdm_trace("      ref_obj has VpiFullName: %s -> %s\n", full_str.c_str(), signal_path.c_str());
                         if (name_map.count(signal_path)) {
                             if (mode_debug)
-                                uhdm_trace("      Found in name_map: %s\n", name_map[signal_path]->name.c_str());
+                                uhdm_trace("      Found in name_map: %s\n", name_map[signal_path]->name.str().c_str());
                             return RTLIL::SigSpec(name_map[signal_path]);
                         }
                     }
@@ -21867,7 +21867,7 @@ RTLIL::SigSpec UhdmImporter::import_hier_path(const hier_path* uhdm_hier, const 
                     if (off >= 0 && off + field_w <= base_wire->width) {
                         uhdm_trace("    hier_path: %s[%d].%s → %s[%d+:%d]\n",
                             base_name.c_str(), i_idx, field_name.c_str(),
-                            base_wire->name.c_str(), off, field_w);
+                            base_wire->name.str().c_str(), off, field_w);
                         return RTLIL::SigSpec(base_wire).extract(off, field_w);
                     }
                 }
@@ -21988,7 +21988,7 @@ RTLIL::SigSpec UhdmImporter::import_hier_path(const hier_path* uhdm_hier, const 
                                         "%s[%d].%s[%d] -> %s[%d+:%d]\n",
                                         base_name.c_str(), i_idx,
                                         field_name.c_str(), j_idx,
-                                        base_wire->name.c_str(),
+                                        base_wire->name.str().c_str(),
                                         abs_start, elem_f_w);
                                 return RTLIL::SigSpec(base_wire)
                                     .extract(abs_start, elem_f_w);
@@ -22102,7 +22102,7 @@ RTLIL::SigSpec UhdmImporter::import_hier_path(const hier_path* uhdm_hier, const 
                                     ".%s -> %s[%d+:%d]\n",
                                     base_name.c_str(), (long long)lin_idx,
                                     field_name.c_str(),
-                                    base_wire->name.c_str(),
+                                    base_wire->name.str().c_str(),
                                     abs_start, field_width);
                             return RTLIL::SigSpec(base_wire)
                                 .extract(abs_start, field_width);
@@ -22987,7 +22987,7 @@ RTLIL::SigSpec UhdmImporter::import_hier_path(const hier_path* uhdm_hier, const 
                                     uhdm_trace("    Struct field bit-select: %s.%s[%d] → "
                                         "%s[%d+:%d]\n",
                                         base_name.c_str(), field_name.c_str(), idx,
-                                        base_wire->name.c_str(), abs_start, elem_width);
+                                        base_wire->name.str().c_str(), abs_start, elem_width);
                                 return RTLIL::SigSpec(base_wire).extract(abs_start, elem_width);
                             }
                         }
@@ -23033,7 +23033,7 @@ RTLIL::SigSpec UhdmImporter::import_hier_path(const hier_path* uhdm_hier, const 
                                 uhdm_trace("    Struct field dynamic bit-select: %s.%s[<dyn>] → "
                                     "$shiftx(%s[%d+:%d])\n",
                                     base_name.c_str(), field_name.c_str(),
-                                    base_wire->name.c_str(),
+                                    base_wire->name.str().c_str(),
                                     field_offset, field_width);
                             return RTLIL::SigSpec(result_w);
                         }
@@ -23111,7 +23111,7 @@ RTLIL::SigSpec UhdmImporter::import_hier_path(const hier_path* uhdm_hier, const 
                                     uhdm_trace("    Struct field var-select: %s.%s[...] → "
                                         "%s[%d+:%d]\n",
                                         base_name.c_str(), field_name.c_str(),
-                                        base_wire->name.c_str(), abs_start, slice_width);
+                                        base_wire->name.str().c_str(), abs_start, slice_width);
                                 return RTLIL::SigSpec(base_wire).extract(abs_start, slice_width);
                             }
                         }
@@ -23135,7 +23135,7 @@ RTLIL::SigSpec UhdmImporter::import_hier_path(const hier_path* uhdm_hier, const 
                                         "%s[%d+:%d]\n",
                                         base_name.c_str(), field_name.c_str(),
                                         ps_left, ps_right,
-                                        base_wire->name.c_str(), abs_start, abs_len);
+                                        base_wire->name.str().c_str(), abs_start, abs_len);
                                 return RTLIL::SigSpec(base_wire).extract(abs_start, abs_len);
                             }
                         }
@@ -23373,7 +23373,7 @@ RTLIL::SigSpec UhdmImporter::import_hier_path(const hier_path* uhdm_hier, const 
                                     "%s[%d+:%d]\n",
                                     base_name.c_str(), field_name.c_str(),
                                     ps_left, ps_right,
-                                    base_wire->name.c_str(), abs_start, abs_len);
+                                    base_wire->name.str().c_str(), abs_start, abs_len);
                             return RTLIL::SigSpec(base_wire).extract(abs_start, abs_len);
                         }
                     }
@@ -23386,7 +23386,7 @@ RTLIL::SigSpec UhdmImporter::import_hier_path(const hier_path* uhdm_hier, const 
     // These are already created during generate scope import
     if (name_map.count(path_name)) {
         if (mode_debug)
-            uhdm_trace("    Found wire in name_map: %s\n", name_map[path_name]->name.c_str());
+            uhdm_trace("    Found wire in name_map: %s\n", name_map[path_name]->name.str().c_str());
         return RTLIL::SigSpec(name_map[path_name]);
     }
     
@@ -24445,7 +24445,7 @@ RTLIL::SigSpec UhdmImporter::import_hier_path(const hier_path* uhdm_hier, const 
                                 if (mode_debug)
                                     uhdm_trace("    Nested struct-field dynamic part-select: %s -> "
                                         "$shiftx(%s[%d+:%d])\n", path_name.c_str(),
-                                        base_wire->name.c_str(), fstart, field_width);
+                                        base_wire->name.str().c_str(), fstart, field_width);
                                 return RTLIL::SigSpec(out);
                             }
                         }
@@ -24500,7 +24500,7 @@ RTLIL::SigSpec UhdmImporter::import_hier_path(const hier_path* uhdm_hier, const 
                                 if (mode_debug)
                                     uhdm_trace("    Nested struct-field dynamic bit-select: %s -> "
                                         "$shiftx(%s[%d+:%d])\n", path_name.c_str(),
-                                        base_wire->name.c_str(), fstart, field_width);
+                                        base_wire->name.str().c_str(), fstart, field_width);
                                 return RTLIL::SigSpec(out);
                             }
                         }
@@ -24517,7 +24517,7 @@ RTLIL::SigSpec UhdmImporter::import_hier_path(const hier_path* uhdm_hier, const 
                             if (mode_debug)
                                 uhdm_trace("    Nested struct-field part-select: %s → "
                                     "%s[%d+:%d]\n", path_name.c_str(),
-                                    base_wire->name.c_str(), abs_start, len);
+                                    base_wire->name.str().c_str(), abs_start, len);
                             return RTLIL::SigSpec(base_wire).extract(abs_start, len);
                         }
                     }
@@ -25695,7 +25695,7 @@ RTLIL::SigSpec UhdmImporter::import_hier_path(const hier_path* uhdm_hier, const 
                         if (fld->UhdmType() == uhdmref_obj) {
                             uhdm_trace("    hier_path '%s' -> \\%s [%d +: %d] "
                                 "(scoped gen-scope struct member)\n",
-                                path_name.c_str(), bw->name.c_str(), off, mw);
+                                path_name.c_str(), bw->name.str().c_str(), off, mw);
                             return fs;
                         }
                         if (fld->UhdmType() == uhdmbit_select) {
@@ -25706,7 +25706,7 @@ RTLIL::SigSpec UhdmImporter::import_hier_path(const hier_path* uhdm_hier, const 
                                 if (i >= 0 && i < mw) {
                                     uhdm_trace("    hier_path '%s' -> \\%s [%d] "
                                         "(scoped gen-scope member bit)\n",
-                                        path_name.c_str(), bw->name.c_str(), off + i);
+                                        path_name.c_str(), bw->name.str().c_str(), off + i);
                                     return fs.extract(i, 1);
                                 }
                             }
@@ -25722,7 +25722,7 @@ RTLIL::SigSpec UhdmImporter::import_hier_path(const hier_path* uhdm_hier, const 
                                 if (lsb >= 0 && lsb + w2 <= mw) {
                                     uhdm_trace("    hier_path '%s' -> \\%s [%d +: %d] "
                                         "(scoped gen-scope member part)\n",
-                                        path_name.c_str(), bw->name.c_str(), off + lsb, w2);
+                                        path_name.c_str(), bw->name.str().c_str(), off + lsb, w2);
                                     return fs.extract(lsb, w2);
                                 }
                             }
@@ -25806,7 +25806,7 @@ RTLIL::SigSpec UhdmImporter::import_hier_path(const hier_path* uhdm_hier, const 
                     force_const_fold = saved_fcf;
                     if (!out.empty()) {
                         uhdm_trace("    hier_path '%s' -> \\%s (elaborated select actual, %d bits)\n",
-                            path_name.c_str(), aw->name.c_str(), out.size());
+                            path_name.c_str(), aw->name.str().c_str(), out.size());
                         return out;
                     }
                 }
@@ -26036,8 +26036,8 @@ RTLIL::SigSpec UhdmImporter::import_struct_param_indexed_member(
         // already folded -- a cast like `fpu_implementation_t'(0)` lands here
         // as an all-zero struct), else fold the RHS now.
         RTLIL::SigSpec whole;
-        auto pit = module->parameter_default_values.find(
-            RTLIL::escape_id(std::string(base_param->VpiName())));
+        auto pit = module->parameter_default_values.find(uid(
+            RTLIL::escape_id(std::string(base_param->VpiName()))));
         if (pit != module->parameter_default_values.end() &&
             pit->second.size() == struct_w && pit->second.is_fully_def())
             whole = RTLIL::SigSpec(pit->second);

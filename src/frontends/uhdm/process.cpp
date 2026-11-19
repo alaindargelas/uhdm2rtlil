@@ -317,8 +317,8 @@ static RTLIL::Cell* build_check_cell(UhdmImporter* self,
     // up across the two frontends.
     std::string cell_name = std::string(stmt_obj->VpiName());
     RTLIL::IdString cell_id = cell_name.empty()
-        ? NEW_ID
-        : RTLIL::escape_id(cell_name);
+        ? uhdm_id_design->twines().add(NEW_ID)
+        : uid(RTLIL::escape_id(cell_name));
     // The same named check is imported more than once when it sits in a
     // comb for-loop the importer UNROLLS -- common_cells' cc_addr_decode_dync
     // runs `ASSUME_I(...)` over every (i, j) rule pair inside
@@ -328,7 +328,7 @@ static RTLIL::Cell* build_check_cell(UhdmImporter* self,
     // Keep the first instance's name (the Verilog frontend's spelling) and
     // suffix the repeats, as read_verilog does for an unrolled block.
     if (!cell_name.empty() && self->module->cell(cell_id))
-        cell_id = RTLIL::IdString(cell_id.str() + "$" + std::to_string(autoidx++));
+        cell_id = uid(ustr(cell_id) + "$" + std::to_string(uhdm_id_design->twines().next_autoidx()));
 
     RTLIL::Cell* check_cell = self->module->addCell(cell_id, ID($check));
     check_cell->setParam(ID::ARGS_WIDTH, 0);
@@ -527,7 +527,7 @@ void UhdmImporter::import_process(const process_stmt* uhdm_process) {
     
     // List current wires for debugging
     for (auto wire : module->wires()) {
-        uhdm_trace("UHDM: Existing wire: %s (width=%d)\n", wire->name.c_str(), wire->width);
+        uhdm_trace("UHDM: Existing wire: %s (width=%d)\n", wire->name.str().c_str(), wire->width);
     }
     
     // Create process with name based on actual source location
@@ -559,10 +559,10 @@ void UhdmImporter::import_process(const process_stmt* uhdm_process) {
     }
     
     // Ensure unique process name by checking if it already exists
-    RTLIL::IdString proc_name = RTLIL::escape_id(proc_name_str);
+    RTLIL::IdString proc_name = uid(RTLIL::escape_id(proc_name_str));
     while (module->processes.count(proc_name)) {
         std::string unique_name = proc_name_str.substr(0, proc_name_str.rfind('$')) + "$" + std::to_string(incr_autoidx());
-        proc_name = RTLIL::escape_id(unique_name);
+        proc_name = uid(RTLIL::escape_id(unique_name));
     }
     
     RTLIL::Process* yosys_proc = module->addProcess(proc_name);
@@ -1264,7 +1264,7 @@ void UhdmImporter::merge_memwr_syncs()
             procs.push_back(pit.second);
         std::sort(procs.begin(), procs.end(),
                   [](RTLIL::Process* a, RTLIL::Process* b) {
-                      return a->name.index_ < b->name.index_;
+                      return a->name.ref().untag().raw() < b->name.ref().untag().raw();
                   });
 
         // A process with an async-reset sync has its memory-write enables gated
@@ -1414,7 +1414,7 @@ void UhdmImporter::drop_init_procs_driven_by_instances() {
                 if (ch.wire && inst_driven.count(ch.wire)) {
                     if (mode_debug)
                         log("  Removing init-only STa process for '%s' (an instance output drives it)\n",
-                            ch.wire->name.c_str());
+                            ch.wire->name.str().c_str());
                     to_remove.push_back(kv.first);
                     break;
                 }
@@ -1904,7 +1904,7 @@ void UhdmImporter::import_always_ff(const process_stmt* uhdm_process, RTLIL::Pro
                         log_flush();
                         // For always_ff with async reset, we expect posedge clk or negedge rst_n
                         // Mark this as having async reset - we'll handle it specially
-                        yosys_proc->attributes[ID("has_async_reset")] = RTLIL::Const(1);
+                        yosys_proc->attributes[uid("\\has_async_reset")] = RTLIL::Const(1);
 
                         // Collect ALL edges (posedge AND negedge) — the original
                         // code only captured the first posedge and stayed empty
@@ -1972,7 +1972,7 @@ void UhdmImporter::import_always_ff(const process_stmt* uhdm_process, RTLIL::Pro
                                 reset_sig = current_ff_edges[1].first;
                                 reset_posedge = current_ff_edges[1].second;
                                 all_edge_triggers = current_ff_edges;
-                                yosys_proc->attributes[ID("is_sr_ff")] = RTLIL::Const(1);
+                                yosys_proc->attributes[uid("\\is_sr_ff")] = RTLIL::Const(1);
                                 uhdm_trace("      %zu edge triggers (set/reset flop): sync rules for all of them\n",
                                     current_ff_edges.size());
                             }
@@ -2027,7 +2027,7 @@ void UhdmImporter::import_always_ff(const process_stmt* uhdm_process, RTLIL::Pro
                             
                             if (edge_trigger_count > 1) {
                                 uhdm_trace("      List contains %d edge triggers - marking as async reset\n", edge_trigger_count);
-                                yosys_proc->attributes[ID("has_async_reset")] = RTLIL::Const(1);
+                                yosys_proc->attributes[uid("\\has_async_reset")] = RTLIL::Const(1);
 
                                 // Extract clock and reset signals from the list
                                 // Convention: first posedge is clock, second edge trigger is reset
@@ -2109,7 +2109,7 @@ void UhdmImporter::import_always_ff(const process_stmt* uhdm_process, RTLIL::Pro
                                     if (all_edge_signals.size() > 1) {
                                         // Multiple edge triggers - mark as async reset
                                         uhdm_trace("      Found %zu edge triggers total - marking as async reset\n", all_edge_signals.size());
-                                        yosys_proc->attributes[ID("has_async_reset")] = RTLIL::Const(1);
+                                        yosys_proc->attributes[uid("\\has_async_reset")] = RTLIL::Const(1);
                                         
                                         // Use second edge trigger as primary reset
                                         // Note: For SR flip-flops with 3+ edge triggers, we need special handling
@@ -2123,7 +2123,7 @@ void UhdmImporter::import_always_ff(const process_stmt* uhdm_process, RTLIL::Pro
                                             uhdm_trace("      Warning: Found %zu edge triggers (SR flip-flop pattern)\n", all_edge_signals.size());
                                             // For SR flip-flops, we need to create sync rules for ALL edge triggers
                                             // This will be handled in a separate code path
-                                            yosys_proc->attributes[ID("is_sr_ff")] = RTLIL::Const(1);
+                                            yosys_proc->attributes[uid("\\is_sr_ff")] = RTLIL::Const(1);
                                         }
                                     }
                                 }
@@ -2140,7 +2140,7 @@ void UhdmImporter::import_always_ff(const process_stmt* uhdm_process, RTLIL::Pro
         }
         
         // Check if we have async reset pattern
-        if (yosys_proc->attributes.count(ID("has_async_reset"))) {
+        if (yosys_proc->attributes.count(uid("\\has_async_reset"))) {
             uhdm_trace("      Processing always_ff with async reset\n");
             log_flush();
             
@@ -2650,7 +2650,7 @@ void UhdmImporter::import_always_ff(const process_stmt* uhdm_process, RTLIL::Pro
             // would need $aldff), and proc reports it exactly as it does for
             // the other frontends.
             if (!if_else_stmt && !assigned_signals.empty() && stmt &&
-                !reset_sig.empty() && !yosys_proc->attributes.count(ID("is_sr_ff"))) {
+                !reset_sig.empty() && !yosys_proc->attributes.count(uid("\\is_sr_ff"))) {
                 RTLIL::SwitchRule* sw = new RTLIL::SwitchRule;
                 sw->signal = reset_sig;
                 std::string body_src = get_src_attribute(stmt);
@@ -2836,7 +2836,7 @@ void UhdmImporter::import_always_ff(const process_stmt* uhdm_process, RTLIL::Pro
             }
             
             // Create sync rules that update from temp wires
-            if (yosys_proc->attributes.count(ID("is_sr_ff"))) {
+            if (yosys_proc->attributes.count(uid("\\is_sr_ff"))) {
                 // SR flip-flop: create sync rules for ALL edge triggers
                 uhdm_trace("      Creating sync rules for SR flip-flop with %zu edge triggers\n", all_edge_triggers.size());
                 
@@ -2847,7 +2847,7 @@ void UhdmImporter::import_always_ff(const process_stmt* uhdm_process, RTLIL::Pro
                     
                     // Add updates for all temp wires
                     for (const auto& [sig_name, temp_wire] : temp_wires) {
-                        RTLIL::IdString signal_id = RTLIL::escape_id(sig_name);
+                        RTLIL::IdString signal_id = uid(RTLIL::escape_id(sig_name));
                         if (module->wire(signal_id)) {
                             sync->actions.push_back(RTLIL::SigSig(
                                 signal_specs[sig_name], RTLIL::SigSpec(temp_wire)));
@@ -2913,7 +2913,7 @@ void UhdmImporter::import_always_ff(const process_stmt* uhdm_process, RTLIL::Pro
 
                 // Add updates for all temp wires (one per signal)
                 for (const auto& [sig_name, temp_wire] : temp_wires) {
-                    RTLIL::IdString signal_id = RTLIL::escape_id(sig_name);
+                    RTLIL::IdString signal_id = uid(RTLIL::escape_id(sig_name));
                     if (module->wire(signal_id)) {
                         // For a part-select LHS, drive only the assigned slice
                         // (`\sig[off +: w] <= temp[off +: w]`) so disjoint
@@ -2984,7 +2984,7 @@ void UhdmImporter::import_always_ff(const process_stmt* uhdm_process, RTLIL::Pro
                     action.priority_mask = memwr_priority_over_prior(sync_clk, action.memid);
                     action.enable = RTLIL::SigSpec(info.en_wire);
                     uhdm_trace("      Added memory write action for %s on clock edge\n",
-                        info.mem_id.c_str());
+                        ustr(info.mem_id).c_str());
                 }
 
                 yosys_proc->syncs.push_back(sync_clk);
@@ -3590,7 +3590,7 @@ void UhdmImporter::import_always_ff(const process_stmt* uhdm_process, RTLIL::Pro
                             yosys_proc->root_case.actions.push_back(
                                 RTLIL::SigSig(RTLIL::SigSpec(temp_wire), RTLIL::SigSpec(orig_wire))
                             );
-                            uhdm_trace("        Initial assignment: %s = %s\n", temp_wire->name.c_str(), orig_wire->name.c_str());
+                            uhdm_trace("        Initial assignment: %s = %s\n", temp_wire->name.str().c_str(), orig_wire->name.str().c_str());
                         }
                     }
                     
@@ -3612,7 +3612,7 @@ void UhdmImporter::import_always_ff(const process_stmt* uhdm_process, RTLIL::Pro
                                                 RTLIL::SigSig(RTLIL::SigSpec(register_temp_wires[sig_name]), rhs)
                                             );
                                             uhdm_trace("        Assignment: %s = %s\n", 
-                                                register_temp_wires[sig_name]->name.c_str(), 
+                                                register_temp_wires[sig_name]->name.str().c_str(), 
                                                 log_signal(rhs).c_str());
                                         }
                                     } else if (assign->Lhs() && assign->Lhs()->VpiType() == vpiBitSelect) {
@@ -3640,7 +3640,7 @@ void UhdmImporter::import_always_ff(const process_stmt* uhdm_process, RTLIL::Pro
                                                     RTLIL::SigSig(RTLIL::SigSpec(register_temp_wires[elem_name]), rhs)
                                                 );
                                                 uhdm_trace("        Assignment: %s = %s\n", 
-                                                    register_temp_wires[elem_name]->name.c_str(), 
+                                                    register_temp_wires[elem_name]->name.str().c_str(), 
                                                     log_signal(rhs).c_str());
                                             }
                                         }
@@ -3673,8 +3673,8 @@ void UhdmImporter::import_always_ff(const process_stmt* uhdm_process, RTLIL::Pro
                                                 )
                                             );
                                             uhdm_trace("        Shift assignment: %s = %s\n",
-                                                register_temp_wires[dst_elem]->name.c_str(),
-                                                src_reg->name.c_str());
+                                                register_temp_wires[dst_elem]->name.str().c_str(),
+                                                src_reg->name.str().c_str());
                                         }
                                     }
                                 }
@@ -3698,7 +3698,7 @@ void UhdmImporter::import_always_ff(const process_stmt* uhdm_process, RTLIL::Pro
                             sync->actions.push_back(
                                 RTLIL::SigSig(RTLIL::SigSpec(orig_wire), RTLIL::SigSpec(temp_wire))
                             );
-                            uhdm_trace("        Sync update: %s <= %s\n", orig_wire->name.c_str(), temp_wire->name.c_str());
+                            uhdm_trace("        Sync update: %s <= %s\n", orig_wire->name.str().c_str(), temp_wire->name.str().c_str());
                         }
                     }
                     
@@ -3878,7 +3878,7 @@ void UhdmImporter::import_always_ff(const process_stmt* uhdm_process, RTLIL::Pro
                             continue;  // memory write — handled above
                         if (sig.lhs_expr) {
                             RTLIL::SigSpec ls = import_expression(sig.lhs_expr);
-                            RTLIL::IdString bw = RTLIL::escape_id(sig.name);
+                            RTLIL::IdString bw = uid(RTLIL::escape_id(sig.name));
                             for (const auto& ch : ls.chunks())
                                 if (ch.wire && ch.wire->name == bw)
                                     for (int b = 0; b < ch.width; b++)
@@ -3983,7 +3983,7 @@ void UhdmImporter::import_always_ff(const process_stmt* uhdm_process, RTLIL::Pro
                         // Per-bit enable wire is already memory-width.
                         action.enable = RTLIL::SigSpec(info.en_wire);
 
-                        uhdm_trace("      Added memory write action for %s\n", info.mem_id.c_str());
+                        uhdm_trace("      Added memory write action for %s\n", ustr(info.mem_id).c_str());
                     }
 
                     // Latch the registered non-memory signals on the clock
@@ -4083,7 +4083,7 @@ void UhdmImporter::import_always_ff(const process_stmt* uhdm_process, RTLIL::Pro
                         if (d.size() < w->width) d.extend_u0(w->width);
                         else if (d.size() > w->width) d = d.extract(0, w->width);
                         sync->actions.push_back(RTLIL::SigSig(RTLIL::SigSpec(w), d));
-                        uhdm_trace("    SSA sync update: %s <= %s\n", w->name.c_str(), log_signal(d));
+                        uhdm_trace("    SSA sync update: %s <= %s\n", w->name.str().c_str(), log_signal(d));
                     }
                     yosys_proc->syncs.push_back(sync);
                     uhdm_trace("      Simple always_ff SSA sync rule created\n");
@@ -4246,7 +4246,7 @@ void UhdmImporter::import_always_ff(const process_stmt* uhdm_process, RTLIL::Pro
                             signal_specs[dedup_key] = spec_for_signal;
                             temp_wires_map[sig.lhs_expr] = temp_wire;
                             uhdm_trace("    Created FF temp wire %s for signal %s (width=%d)\n",
-                                temp_wire->name.c_str(), sig.name.c_str(), tmp_width);
+                                temp_wire->name.str().c_str(), sig.name.c_str(), tmp_width);
                         }
                     }
 
@@ -4274,7 +4274,7 @@ void UhdmImporter::import_always_ff(const process_stmt* uhdm_process, RTLIL::Pro
                             yosys_proc->root_case.actions.push_back(
                                 RTLIL::SigSig(RTLIL::SigSpec(temp_wire), lhs_spec));
                             uhdm_trace("    Added hold default: %s = %s\n",
-                                temp_wire->name.c_str(), log_signal(lhs_spec));
+                                temp_wire->name.str().c_str(), log_signal(lhs_spec));
                         }
                     }
 
@@ -4332,12 +4332,12 @@ void UhdmImporter::import_always_ff(const process_stmt* uhdm_process, RTLIL::Pro
                             }
                             sync->actions.push_back(RTLIL::SigSig(l, r));
                             uhdm_trace("    Added sync update (written bits only): %s <= %s\n",
-                                log_signal(l), temp_wire->name.c_str());
+                                log_signal(l), temp_wire->name.str().c_str());
                         } else {
                             sync->actions.push_back(
                                 RTLIL::SigSig(lhs_spec, RTLIL::SigSpec(temp_wire)));
                             uhdm_trace("    Added sync update: %s <= %s\n",
-                                log_signal(lhs_spec), temp_wire->name.c_str());
+                                log_signal(lhs_spec), temp_wire->name.str().c_str());
                         }
                     }
 
@@ -4367,7 +4367,7 @@ void UhdmImporter::import_always_ff(const process_stmt* uhdm_process, RTLIL::Pro
     for (auto sync : yosys_proc->syncs) {
         if (sync->signal.is_wire()) {
             RTLIL::Wire* w = sync->signal.as_wire();
-            if (w && w->attributes.count(RTLIL::escape_id("gclk"))) {
+            if (w && w->attributes.count(uid(RTLIL::escape_id("gclk")))) {
                 sync->type = RTLIL::STg;
                 sync->signal = RTLIL::SigSpec();
             }
@@ -4632,7 +4632,7 @@ void UhdmImporter::import_always_comb(const process_stmt* uhdm_process, RTLIL::P
         if (sig.lhs_expr && sig.lhs_expr->VpiType() == vpiBitSelect) {
             auto bs = any_cast<const bit_select*>(sig.lhs_expr);
             if (bs && !bs->VpiName().empty()) {
-                RTLIL::IdString mem_id = RTLIL::escape_id(std::string(bs->VpiName()));
+                RTLIL::IdString mem_id = uid(RTLIL::escape_id(std::string(bs->VpiName())));
                 if (module->memories.count(mem_id)) continue;
             }
         }
@@ -4791,7 +4791,7 @@ void UhdmImporter::import_always_comb(const process_stmt* uhdm_process, RTLIL::P
             else
                 signal_specs[dedup_key] = lhs_spec;
             uhdm_trace("    Created temp wire %s for signal %s (width=%d)\n",
-                temp_wire->name.c_str(), sig.name.c_str(), tmp_width);
+                temp_wire->name.str().c_str(), sig.name.c_str(), tmp_width);
         }
 
         // Map this expression to the temp wire
@@ -4836,7 +4836,7 @@ void UhdmImporter::import_always_comb(const process_stmt* uhdm_process, RTLIL::P
             yosys_proc->root_case.actions.push_back(
                 RTLIL::SigSig(RTLIL::SigSpec(temp_wire), lhs_spec)
             );
-            uhdm_trace("    Added initialization: %s = %s\n", temp_wire->name.c_str(), log_signal(lhs_spec));
+            uhdm_trace("    Added initialization: %s = %s\n", temp_wire->name.str().c_str(), log_signal(lhs_spec));
         }
     }
     
@@ -4980,13 +4980,13 @@ void UhdmImporter::import_always_comb(const process_stmt* uhdm_process, RTLIL::P
                 }
                 sync_always->actions.push_back(RTLIL::SigSig(l, r));
                 uhdm_trace("    Added partial update: %s <= %s (%d/%d bits)\n",
-                    sig_name.c_str(), temp_wire->name.c_str(),
+                    sig_name.c_str(), temp_wire->name.str().c_str(),
                     (int)wb->second.size(), base_w->width);
             } else {
                 sync_always->actions.push_back(
                     RTLIL::SigSig(lhs_spec, RTLIL::SigSpec(temp_wire))
                 );
-                uhdm_trace("    Added update: %s <= %s\n", log_signal(lhs_spec), temp_wire->name.c_str());
+                uhdm_trace("    Added update: %s <= %s\n", log_signal(lhs_spec), temp_wire->name.str().c_str());
             }
         }
     }
@@ -5047,7 +5047,7 @@ void UhdmImporter::import_always_comb(const process_stmt* uhdm_process, RTLIL::P
         // can then promote the memory to per-element registers).
         std::string cell_name = "$memwr$\\" + mem_name + "$" + idx;
         RTLIL::Cell* memwr = module->addCell(RTLIL::escape_id(cell_name), ID($memwr));
-        memwr->setParam(ID::MEMID,        RTLIL::Const(mem_id.str()));
+        memwr->setParam(ID::MEMID,        RTLIL::Const(ustr(mem_id)));
         memwr->setParam(ID::ABITS,        RTLIL::Const(addr_w));
         memwr->setParam(ID::WIDTH,        RTLIL::Const(mem->width));
         memwr->setParam(ID::CLK_ENABLE,   RTLIL::Const(0));
@@ -5758,7 +5758,7 @@ void UhdmImporter::create_block_local_wires(const UHDM::any* stmt) {
             std::string scope = get_current_gen_scope();
             std::string base_key = scope.empty() ? vname : scope + "." + vname;
             std::string wire_name = base_key;
-            RTLIL::IdString wname = RTLIL::escape_id(wire_name);
+            RTLIL::IdString wname = uid(RTLIL::escape_id(wire_name));
             if (module->wire(wname)) {
                 auto ep = block_local_wire_epoch.find(base_key);
                 // Not a promoted local at all (a real module signal of the
@@ -5786,7 +5786,7 @@ void UhdmImporter::create_block_local_wires(const UHDM::any* stmt) {
                 int n = 1;
                 do {
                     wire_name = base_key + "$" + std::to_string(++n);
-                    wname = RTLIL::escape_id(wire_name);
+                    wname = uid(RTLIL::escape_id(wire_name));
                 } while (module->wire(wname));
             }
             block_local_wire_epoch[base_key] = block_local_epoch;
@@ -6190,8 +6190,8 @@ bool UhdmImporter::emit_initial_meminit_writes(const any* stmt) {
         RTLIL::IdString mid = resolve_mem_id(mem);
         int w = module->memories.at(mid)->width;
         RTLIL::Cell* cell = module->addCell(
-            stringf("$meminit%s$%d", mid.c_str(), addr), ID($meminit_v2));
-        cell->setParam(ID::MEMID, RTLIL::Const(mid.str()));
+            stringf("$meminit%s$%d", ustr(mid).c_str(), addr), ID($meminit_v2));
+        cell->setParam(ID::MEMID, RTLIL::Const(ustr(mid)));
         cell->setParam(ID::ABITS, RTLIL::Const(32));
         cell->setParam(ID::WIDTH, RTLIL::Const(w));
         cell->setParam(ID::WORDS, RTLIL::Const(1));
@@ -6750,10 +6750,10 @@ RTLIL::SigSpec UhdmImporter::import_indexed_part_select_with_substitution(const 
     // Look up the wire in the current module
     RTLIL::SigSpec base_signal;
     if (!base_signal_name.empty()) {
-        RTLIL::IdString wire_id = RTLIL::escape_id(base_signal_name);
+        RTLIL::IdString wire_id = uid(RTLIL::escape_id(base_signal_name));
         if (module->wire(wire_id)) {
             base_signal = RTLIL::SigSpec(module->wire(wire_id));
-            uhdm_trace("        Found wire %s in module (width=%d)\n", wire_id.c_str(), base_signal.size());
+            uhdm_trace("        Found wire %s in module (width=%d)\n", ustr(wire_id).c_str(), base_signal.size());
         } else {
             log_warning("Wire %s not found in module\n", base_signal_name.c_str());
             return RTLIL::SigSpec();
@@ -6863,7 +6863,7 @@ RTLIL::SigSpec UhdmImporter::bypass_pending_blocking_mem_writes(const RTLIL::IdS
         RTLIL::SigSpec take = module->And(NEW_ID, d, hitv);
         rd = module->Or(NEW_ID, keep, take);
         uhdm_trace("    memrd %s: bypassed an in-flight blocking write (control wires)\n",
-                   mem_id.c_str());
+                   ustr(mem_id).c_str());
     }
     if (!(in_always_ff_body_mode || in_always_ff_context))
         return rd;
@@ -6886,7 +6886,7 @@ RTLIL::SigSpec UhdmImporter::bypass_pending_blocking_mem_writes(const RTLIL::IdS
         RTLIL::SigSpec part = module->Mux(NEW_ID, rd.extract(lo, wd), d, hit);
         rd.replace(lo, part);
         uhdm_trace("    memrd %s: bypassed a pending blocking write (slice %d+:%d)\n",
-                   mem_id.c_str(), lo, wd);
+                   ustr(mem_id).c_str(), lo, wd);
     }
     return rd;
 }
@@ -6915,7 +6915,7 @@ void UhdmImporter::emit_pending_memory_writes(RTLIL::SyncRule* sync) {
             // `Assert count_id(wire->name) == 0` (rtlil.cc:2872).  autoidx is
             // the module-unique counter the Verilog frontend uses for the same
             // wires.
-            std::string base_name = stringf("$memwr$%s$%zu$%d", mem_write.mem_id.c_str(), i, incr_autoidx());
+            std::string base_name = stringf("$memwr$%s$%zu$%d", ustr(mem_write.mem_id).c_str(), i, incr_autoidx());
         
             // Widths come from the MEMORY.  They used to be hard-coded 10 /
             // 4 / 4 ("for this test" — asym_ram_sdp_read_wider), which is why
@@ -7429,7 +7429,7 @@ void UhdmImporter::import_statement_with_loop_vars(const any* uhdm_stmt, RTLIL::
                                     
                                     // Configure the memrd cell
                                     RTLIL::Memory* mem = module->memories.at(resolve_mem_id(mem_name));
-                                    memrd->setParam(ID::MEMID, RTLIL::Const(resolve_mem_id(mem_name).str()));
+                                    memrd->setParam(ID::MEMID, RTLIL::Const(ustr(resolve_mem_id(mem_name))));
                                     memrd->setParam(ID::ABITS, RTLIL::Const(GetSize(addr_spec)));
                                     memrd->setParam(ID::WIDTH, RTLIL::Const(mem->width));
                                     memrd->setParam(ID::CLK_ENABLE, RTLIL::Const(0));
@@ -8579,8 +8579,8 @@ void UhdmImporter::import_statement_sync(const any* uhdm_stmt, RTLIL::SyncRule* 
                     auto a = any_cast<const assignment*>(x);
                     if (!a->Lhs() || a->Lhs()->VpiType() != vpiBitSelect) return false;
                     auto bsl = any_cast<const bit_select*>(a->Lhs());
-                    if (!module->memories.count(
-                            RTLIL::escape_id(std::string(bsl->VpiName()))))
+                    if (!module->memories.count(uid(
+                            RTLIL::escape_id(std::string(bsl->VpiName())))))
                         return false;
                     auto idx = bsl->VpiIndex();
                     std::string idx_name =
@@ -8603,8 +8603,8 @@ void UhdmImporter::import_statement_sync(const any* uhdm_stmt, RTLIL::SyncRule* 
                         auto a = any_cast<const assignment*>(x);
                         if (!a->Lhs() || a->Lhs()->VpiType() != vpiBitSelect) continue;
                         auto bsl = any_cast<const bit_select*>(a->Lhs());
-                        if (!module->memories.count(
-                                RTLIL::escape_id(std::string(bsl->VpiName()))))
+                        if (!module->memories.count(uid(
+                                RTLIL::escape_id(std::string(bsl->VpiName())))))
                             continue;
                         any_mem = true;
                         auto idx = bsl->VpiIndex();
@@ -8654,8 +8654,8 @@ void UhdmImporter::import_statement_sync(const any* uhdm_stmt, RTLIL::SyncRule* 
                                body->VpiType() == vpiAssignment &&
                                any_cast<const assignment*>(body)->Lhs() &&
                                any_cast<const assignment*>(body)->Lhs()->VpiType() == vpiBitSelect &&
-                               module->memories.count(RTLIL::escape_id(std::string(
-                                   any_cast<const bit_select*>(any_cast<const assignment*>(body)->Lhs())->VpiName())))) {
+                               module->memories.count(uid(RTLIL::escape_id(std::string(
+                                   any_cast<const bit_select*>(any_cast<const assignment*>(body)->Lhs())->VpiName()))))) {
                         // Initial-block ROM init with a single-statement body:
                         // `for (i...) mem[i] = <const-of-i>` (e.g. svtypes/
                         // logic_rom).  Emit one $meminit_v2 per word instead of
@@ -8673,7 +8673,7 @@ void UhdmImporter::import_statement_sync(const any* uhdm_stmt, RTLIL::SyncRule* 
                         const assignment* mem_assign = any_cast<const assignment*>(body);
                         std::string memory_name = std::string(
                             any_cast<const bit_select*>(mem_assign->Lhs())->VpiName());
-                        int mem_width = module->memories.at(RTLIL::escape_id(memory_name))->width;
+                        int mem_width = module->memories.at(uid(RTLIL::escape_id(memory_name)))->width;
                         int64_t loop_end = descending ? (inclusive ? end_value : end_value + 1)
                                                  : (inclusive ? end_value : end_value - 1);
                         std::vector<std::pair<int64_t, RTLIL::Const>> rom_words;
@@ -9053,7 +9053,7 @@ void UhdmImporter::import_statement_sync(const any* uhdm_stmt, RTLIL::SyncRule* 
                                         stringf("$meminit$\\%s$%s:%d$%d", memory_name.c_str(), meminit_file.c_str(), meminit_line, 12 + (int)i),
                                         ID($meminit_v2)
                                     );
-                                    int mem_width = module->memories.at(RTLIL::escape_id(memory_name))->width;
+                                    int mem_width = module->memories.at(uid(RTLIL::escape_id(memory_name)))->width;
                                     cell->setParam(ID::MEMID, RTLIL::Const("\\" + memory_name));
                                     cell->setParam(ID::ABITS, RTLIL::Const(32));
                                     cell->setParam(ID::WIDTH, RTLIL::Const(mem_width));
@@ -9218,7 +9218,7 @@ void UhdmImporter::import_statement_sync(const any* uhdm_stmt, RTLIL::SyncRule* 
                                     RTLIL::Const result = evaluate_function_call(func_def, const_args, output_params);
 
                                     // Determine memory width from the memory object
-                                    RTLIL::IdString mem_id = RTLIL::escape_id(mfa.mem_name);
+                                    RTLIL::IdString mem_id = uid(RTLIL::escape_id(mfa.mem_name));
                                     int mem_width = 8; // default
                                     if (module->memories.count(mem_id) > 0) {
                                         mem_width = module->memories.at(mem_id)->width;
@@ -10012,8 +10012,8 @@ void UhdmImporter::import_display_stmt(const UHDM::sys_func_call* call,
 
     // Parse and emit the format
     int default_base = 10;
-    RTLIL::IdString yosys_task_name(task_name);
-    RTLIL::IdString mod_name = module->name;
+    std::string yosys_task_name = task_name;
+    std::string mod_name = module->name.str();
     Fmt fmt;
     fmt.parse_verilog(fmt_args, /*sformat_like=*/false, default_base, yosys_task_name, mod_name);
     if (task_name.substr(0, 8) == "$display")
@@ -10022,7 +10022,7 @@ void UhdmImporter::import_display_stmt(const UHDM::sys_func_call* call,
 
     if (mode_debug)
         uhdm_trace("    Created $print cell '%s' for '%s' (EN=%s)\n",
-            cell_id.c_str(), task_name.c_str(), en_wire->name.c_str());
+            cell_id.c_str(), task_name.c_str(), en_wire->name.str().c_str());
 }
 
 // Resolve a `foreach (arr[var])` to its unroll bounds.  SINGLE loop var only.
@@ -10440,7 +10440,7 @@ void UhdmImporter::import_statement_comb(const any* uhdm_stmt, RTLIL::Process* p
                     // for public wires (as for a block-local `int i`), and an
                     // internal `$` name read back the wire's FINAL value -- a
                     // combinational loop through the next iteration's guard.
-                    RTLIL::Wire* vw = module->addWire(RTLIL::IdString(
+                    RTLIL::Wire* vw = module->addWire(uid(
                         stringf("\\$forvar$%s$%d", lv.c_str(), incr_autoidx())), w);
                     name_map[lv] = vw;
                     bool had_lv = loop_values.count(lv) > 0;
@@ -11356,7 +11356,7 @@ void UhdmImporter::import_begin_block_comb(const UHDM::scope* uhdm_begin, RTLIL:
             }
 
             uhdm_trace("    Created block-local wire %s (temp: %s, width: %d)\n",
-                block_wire->name.c_str(), temp_wire->name.c_str(), width);
+                block_wire->name.str().c_str(), temp_wire->name.str().c_str(), width);
         }
     }
 
@@ -11781,7 +11781,7 @@ void UhdmImporter::import_tf_call_comb(const UHDM::tf_call* tc,
             if (task_mapping.count(var_name)) continue;
 
             std::string wire_name = context + "." + var_name;
-            RTLIL::IdString tw_id = RTLIL::escape_id(wire_name);
+            RTLIL::IdString tw_id = uid(RTLIL::escape_id(wire_name));
             RTLIL::Wire* task_wire = module->wire(tw_id);
             if (!task_wire) task_wire = module->addWire(tw_id, width);
             task_wire->attributes[ID::nosync] = RTLIL::Const(1);
@@ -11974,9 +11974,9 @@ void UhdmImporter::import_method_func_call_comb(const UHDM::method_func_call* mf
     if (!iface_inst && uhdm_design && uhdm_design->AllInterfaces()) {
         std::string iface_name;
         if (auto port_wire = module->wire(RTLIL::escape_id(prefix_name))) {
-            if (port_wire->attributes.count(RTLIL::escape_id("interface_type"))) {
-                iface_name = port_wire->attributes.at(
-                    RTLIL::escape_id("interface_type")).decode_string();
+            if (port_wire->attributes.count(uid(RTLIL::escape_id("interface_type")))) {
+                iface_name = port_wire->attributes.at(uid(
+                    RTLIL::escape_id("interface_type"))).decode_string();
                 if (!iface_name.empty() && iface_name[0] == '\\')
                     iface_name = iface_name.substr(1);
             }
@@ -12132,7 +12132,7 @@ void UhdmImporter::import_method_func_call_comb(const UHDM::method_func_call* mf
         std::string full = prefix_name + "." + sig_name;
         auto it = name_map.find(full);
         if (it == name_map.end()) {
-            RTLIL::IdString wid = RTLIL::escape_id(full);
+            RTLIL::IdString wid = uid(RTLIL::escape_id(full));
             if (auto w = module->wire(wid))
                 mapping[sig_name] = RTLIL::SigSpec(w);
             return;
@@ -12343,7 +12343,7 @@ void UhdmImporter::inline_task_body_comb(const any* stmt, RTLIL::Process* proc,
                     // function's Variables() (created by the caller) AND the
                     // body begin-block's Variables() — reuse the existing wire
                     // rather than re-adding it (which asserts on the dup name).
-                    RTLIL::IdString bw_id = RTLIL::escape_id(wire_name);
+                    RTLIL::IdString bw_id = uid(RTLIL::escape_id(wire_name));
                     RTLIL::Wire* block_wire = module->wire(bw_id);
                     bool block_wire_existed = block_wire != nullptr;
                     if (!block_wire) block_wire = module->addWire(bw_id, width);
@@ -13710,7 +13710,7 @@ void UhdmImporter::inline_func_body_comb(const any* stmt, RTLIL::Process* proc,
                     // Find temp wire by prefix match
                     RTLIL::Wire* temp_wire = nullptr;
                     for (auto& [wname, w] : module->wires_) {
-                        if (wname.str().substr(0, temp_name_pattern.size()) == temp_name_pattern) {
+                        if (ustr(wname).substr(0, temp_name_pattern.size()) == temp_name_pattern) {
                             temp_wire = w;
                             break;
                         }
@@ -14439,12 +14439,12 @@ void UhdmImporter::packed_elem_geometry(const bit_select* bs, RTLIL::Wire* w,
                                         int& elem_w, int& arr_low) {
     elem_w = 1; arr_low = 0;
     if (!w) return;
-    if (w->attributes.count(RTLIL::escape_id("packed_elem_width"))) {
-        elem_w = w->attributes.at(RTLIL::escape_id("packed_elem_width")).as_int();
-        int pl = w->attributes.count(RTLIL::escape_id("packed_outer_left"))
-            ? w->attributes.at(RTLIL::escape_id("packed_outer_left")).as_int() : 0;
-        int pr = w->attributes.count(RTLIL::escape_id("packed_outer_right"))
-            ? w->attributes.at(RTLIL::escape_id("packed_outer_right")).as_int() : 0;
+    if (w->attributes.count(uid(RTLIL::escape_id("packed_elem_width")))) {
+        elem_w = w->attributes.at(uid(RTLIL::escape_id("packed_elem_width"))).as_int();
+        int pl = w->attributes.count(uid(RTLIL::escape_id("packed_outer_left")))
+            ? w->attributes.at(uid(RTLIL::escape_id("packed_outer_left"))).as_int() : 0;
+        int pr = w->attributes.count(uid(RTLIL::escape_id("packed_outer_right")))
+            ? w->attributes.at(uid(RTLIL::escape_id("packed_outer_right"))).as_int() : 0;
         arr_low = std::min(pl, pr);
     }
     if (elem_w <= 1 && bs) if (auto a = bs->Actual_group()) {
@@ -14650,7 +14650,7 @@ void UhdmImporter::import_assignment_sync(const assignment* uhdm_assign, RTLIL::
         RTLIL::Wire* bw = bname.empty() ? nullptr
                                         : module->wire(RTLIL::escape_id(bname));
         auto idx_e = dynamic_cast<const UHDM::expr*>(bs->VpiIndex());
-        if (bw && idx_e && !module->memories.count(RTLIL::escape_id(bname)) &&
+        if (bw && idx_e && !module->memories.count(uid(RTLIL::escape_id(bname))) &&
             expanded_array_low(bname) < 0) {
             std::map<std::string, RTLIL::SigSpec> blocking_map;
             for (const auto& [plhs, prhs] : pending_sync_assignments)
@@ -14799,7 +14799,7 @@ void UhdmImporter::import_assignment_sync(const assignment* uhdm_assign, RTLIL::
                 note_pending_sync(full_lhs);
                 if (mode_debug)
                     uhdm_trace("    Dynamic indexed-part-select LHS: emitted read-modify-write on '%s'\n",
-                        base_wire->name.c_str());
+                        base_wire->name.str().c_str());
                 return;
             }
         }
@@ -14824,11 +14824,11 @@ void UhdmImporter::import_assignment_sync(const assignment* uhdm_assign, RTLIL::
             // fine, and the comb-style path already resolves the scope.
             RTLIL::IdString mem_id = resolve_mem_id(signal_name);
             
-            uhdm_trace("            Signal name: '%s', mem_id: '%s'\n", signal_name.c_str(), mem_id.c_str());
+            uhdm_trace("            Signal name: '%s', mem_id: '%s'\n", signal_name.c_str(), ustr(mem_id).c_str());
             uhdm_trace("            Checking for memory in module...\n");
             uhdm_trace("            Module has %d memories\n", (int)module->memories.size());
             for (auto& mem_pair : module->memories) {
-                uhdm_trace("              Memory: %s\n", mem_pair.first.c_str());
+                uhdm_trace("              Memory: %s\n", ustr(mem_pair.first).c_str());
             }
             log_flush();
             
@@ -15154,13 +15154,13 @@ void UhdmImporter::import_assignment_sync(const assignment* uhdm_assign, RTLIL::
         if (lhs_expr->VpiType() == vpiBitSelect) {
             auto bs = any_cast<const bit_select*>(lhs_expr);
             std::string bn = std::string(bs->VpiName());
-            RTLIL::IdString bid = RTLIL::escape_id(bn);
+            RTLIL::IdString bid = uid(RTLIL::escape_id(bn));
             RTLIL::Wire* base_wire = module->wire(bid);
             if (!base_wire) base_wire = find_wire_in_scope(bn);
             if (base_wire && bs->VpiIndex() && base_wire->width > 1 &&
                 !module->memories.count(bid) && !module->memories.count(resolve_mem_id(bn)) &&
                 !module->wire(RTLIL::escape_id(bn + "[0]")) &&
-                !base_wire->attributes.count(RTLIL::escape_id("packed_elem_width"))) {
+                !base_wire->attributes.count(uid(RTLIL::escape_id("packed_elem_width")))) {
                 bool edge_sync0 = sync && (sync->type == RTLIL::STp || sync->type == RTLIL::STn);
                 const std::map<std::string, RTLIL::SigSpec>* bmap =
                     (edge_sync0 && !sync_blocking_values.empty()) ? &sync_blocking_values : nullptr;
@@ -15584,9 +15584,9 @@ bool UhdmImporter::emit_dynamic_indexed_part_select_write(
         auto ew_id = RTLIL::escape_id("packed_elem_width");
         auto ol_id = RTLIL::escape_id("packed_outer_left");
         auto or_id = RTLIL::escape_id("packed_outer_right");
-        if (ga.count(ew_id) && ga.count(ol_id) && ga.count(or_id)) {
-            int ew = ga.at(ew_id).as_int();
-            int ol = ga.at(ol_id).as_int(), orr = ga.at(or_id).as_int();
+        if (ga.count(uid(ew_id)) && ga.count(uid(ol_id)) && ga.count(uid(or_id))) {
+            int ew = ga.at(uid(ew_id)).as_int();
+            int ol = ga.at(uid(ol_id)).as_int(), orr = ga.at(uid(or_id)).as_int();
             int nelem = std::abs(ol - orr) + 1;
             if (ew > 1 && ew * nelem == base_w) {
                 if (ol < orr) return false;
@@ -16201,7 +16201,7 @@ bool UhdmImporter::emit_dynamic_unpacked_array_partial_write(
     if (base_name.empty()) return false;
     // Only for an EXPANDED array — a real $memory has no element wires, and
     // the memory path must keep handling it.
-    if (module->memories.count(RTLIL::escape_id(base_name))) return false;
+    if (module->memories.count(uid(RTLIL::escape_id(base_name)))) return false;
     if (expanded_array_low(base_name) < 0) return false;
 
     const UHDM::any* idx_expr = (*vs->Exprs())[0];
@@ -16366,8 +16366,8 @@ const UHDM::any* UhdmImporter::iface_port_member_decl(const std::string& base, c
     std::string itn;
     // the port's placeholder wire records the interface in interface_type ...
     RTLIL::Wire* pw = module ? module->wire(RTLIL::escape_id(base)) : nullptr;
-    if (pw && pw->attributes.count(RTLIL::escape_id("interface_type"))) {
-        itn = pw->attributes.at(RTLIL::escape_id("interface_type")).decode_string();
+    if (pw && pw->attributes.count(uid(RTLIL::escape_id("interface_type")))) {
+        itn = pw->attributes.at(uid(RTLIL::escape_id("interface_type"))).decode_string();
         if (!itn.empty() && itn[0] == '\\') itn = itn.substr(1);
         if (itn.compare(0, 8, "$paramod") == 0) {
             auto b1 = itn.find('\\');
@@ -16466,7 +16466,7 @@ bool UhdmImporter::emit_iface_member_elem_write(const UHDM::hier_path* hp,
             if (!decl && eii->Nets()) for (auto n : *eii->Nets()) if (std::string(n->VpiName()) == mem) { decl = n; break; }
         }
     RTLIL::Wire* pw = module->wire(RTLIL::escape_id(base));
-    bool is_iface = decl || (pw && pw->attributes.count(RTLIL::escape_id("is_interface"))) ||
+    bool is_iface = decl || (pw && pw->attributes.count(uid(RTLIL::escape_id("is_interface")))) ||
                     iface_inst_vars_.count(base);
     if (!is_iface) return false;
     if (!decl) decl = bs->Actual_group();
@@ -18129,9 +18129,9 @@ bool UhdmImporter::emit_dynamic_array_elem_field_write(
                              : RTLIL::SigSpec(base_wire);
     if (mode_debug)
         uhdm_trace("    dyn_elem_field_write FLAT RMW: base '%s' (%s, %d bits, elem %d x %d) cur=%s own_temp=%s elem_temp0=%s\n",
-            base_name.c_str(), base_wire->name.c_str(), base_w, elem_w, n_elems,
+            base_name.c_str(), base_wire->name.str().c_str(), base_w, elem_w, n_elems,
             current_comb_values.count(base_name) ? "in-flight" : "flat wire",
-            find_own_temp_wire(base_name) ? find_own_temp_wire(base_name)->name.c_str() : "none",
+            find_own_temp_wire(base_name) ? find_own_temp_wire(base_name)->name.str().c_str() : "none",
             module->wire("$0\\" + base_name + "[" + std::to_string(array_low) + "]") ? "yes" : "no");
     if (!current_comb_values.count(base_name) && case_rule) {
         // always_ff: current_comb_values is suppressed to keep non-blocking
@@ -18391,7 +18391,7 @@ bool UhdmImporter::emit_dynamic_packed_select_write(
         }
     }
     // Flat packed wire only: not a $memory, not an expanded per-element array.
-    if (module->memories.count(RTLIL::escape_id(base_name))) return false;
+    if (module->memories.count(uid(RTLIL::escape_id(base_name)))) return false;
     if (expanded_array_low(base_name) >= 0) return false;
     RTLIL::Wire* base_wire = name_map.count(base_name)
                                  ? name_map[base_name]
@@ -18615,12 +18615,12 @@ bool UhdmImporter::emit_dynamic_packed_select_write(
     // cleared on a write to element 0).  A package or module typedef carries
     // the full shape on the net too, so this only ever corrects a disagreement.
     if (dim2_size == 0 && base_wire &&
-        base_wire->attributes.count(RTLIL::escape_id("packed_elem_width")) &&
-        base_wire->attributes.count(RTLIL::escape_id("packed_outer_left")) &&
-        base_wire->attributes.count(RTLIL::escape_id("packed_outer_right"))) {
-        int aew = base_wire->attributes.at(RTLIL::escape_id("packed_elem_width")).as_int();
-        int al = base_wire->attributes.at(RTLIL::escape_id("packed_outer_left")).as_int();
-        int ar = base_wire->attributes.at(RTLIL::escape_id("packed_outer_right")).as_int();
+        base_wire->attributes.count(uid(RTLIL::escape_id("packed_elem_width"))) &&
+        base_wire->attributes.count(uid(RTLIL::escape_id("packed_outer_left"))) &&
+        base_wire->attributes.count(uid(RTLIL::escape_id("packed_outer_right")))) {
+        int aew = base_wire->attributes.at(uid(RTLIL::escape_id("packed_elem_width"))).as_int();
+        int al = base_wire->attributes.at(uid(RTLIL::escape_id("packed_outer_left"))).as_int();
+        int ar = base_wire->attributes.at(uid(RTLIL::escape_id("packed_outer_right"))).as_int();
         int aouter = std::abs(al - ar) + 1;
         if (aew > 0 && aouter > 0 && aew * aouter == base_w &&
             (aew != elem_w || aouter != outer_size)) {
@@ -19410,7 +19410,7 @@ void UhdmImporter::import_assignment_comb(const assignment* uhdm_assign, RTLIL::
         if (lhs_expr_check->VpiType() == vpiBitSelect) {
             const bit_select* bs = any_cast<const bit_select*>(lhs_expr_check);
             std::string bs_name = std::string(bs->VpiName());
-            RTLIL::IdString mem_id_check = RTLIL::escape_id(bs_name);
+            RTLIL::IdString mem_id_check = uid(RTLIL::escape_id(bs_name));
             RTLIL::Wire* first_elem = !module->memories.count(mem_id_check)
                 ? module->wire(RTLIL::escape_id(bs_name + "[0]")) : nullptr;
             // The index is only *truly* dynamic if it does not resolve to a
@@ -19497,7 +19497,7 @@ void UhdmImporter::import_assignment_comb(const assignment* uhdm_assign, RTLIL::
             const bit_select* bs = any_cast<const bit_select*>(lhs_e);
             std::string bs_name = std::string(bs->VpiName());
             if (!bs_name.empty() &&
-                !module->memories.count(RTLIL::escape_id(bs_name)) &&
+                !module->memories.count(uid(RTLIL::escape_id(bs_name))) &&
                 bs->VpiIndex() && expanded_array_low(bs_name) >= 0) {
                 RTLIL::SigSpec idx =
                     import_expression(bs->VpiIndex(), comb_read_map());
@@ -19541,7 +19541,7 @@ void UhdmImporter::import_assignment_comb(const assignment* uhdm_assign, RTLIL::
         if (lhs_e->VpiType() == vpiBitSelect) {
             const bit_select* bs = any_cast<const bit_select*>(lhs_e);
             std::string bs_name = std::string(bs->VpiName());
-            RTLIL::IdString wid = RTLIL::escape_id(bs_name);
+            RTLIL::IdString wid = uid(RTLIL::escape_id(bs_name));
             RTLIL::Wire* w = module->wire(wid);
             // Plain register: not a memory, not an expanded-array element set.
             // Skipped inside generate scopes, where the bit-select's base wire
@@ -19602,13 +19602,13 @@ void UhdmImporter::import_assignment_comb(const assignment* uhdm_assign, RTLIL::
                     }
                 }
                 int elem_w = 1, arr_low = 0;
-                if (w->attributes.count(RTLIL::escape_id("packed_elem_width"))) {
-                    elem_w = w->attributes.at(
-                        RTLIL::escape_id("packed_elem_width")).as_int();
-                    int pl = w->attributes.at(
-                        RTLIL::escape_id("packed_outer_left")).as_int();
-                    int pr = w->attributes.at(
-                        RTLIL::escape_id("packed_outer_right")).as_int();
+                if (w->attributes.count(uid(RTLIL::escape_id("packed_elem_width")))) {
+                    elem_w = w->attributes.at(uid(
+                        RTLIL::escape_id("packed_elem_width"))).as_int();
+                    int pl = w->attributes.at(uid(
+                        RTLIL::escape_id("packed_outer_left"))).as_int();
+                    int pr = w->attributes.at(uid(
+                        RTLIL::escape_id("packed_outer_right"))).as_int();
                     arr_low = std::min(pl, pr);
                 }
                 if (elem_w <= 1) if (auto a = bs->Actual_group()) {
@@ -20482,7 +20482,7 @@ void UhdmImporter::import_assignment_comb(const assignment* uhdm_assign, RTLIL::
                 remove_target_from_switches(case_rule, temp_spec);
                 case_rule->actions.push_back(RTLIL::SigSig(temp_spec, rhs));
                 uhdm_trace("      Assigned to temp wire %s <= [value] (temp_wire=%s)\n",
-                    signal_name.c_str(), temp_wire->name.c_str());
+                    signal_name.c_str(), temp_wire->name.str().c_str());
             }
             return;
         }
@@ -22601,8 +22601,8 @@ void UhdmImporter::import_statement_comb(const any* uhdm_stmt, RTLIL::CaseRule* 
                                     RTLIL::Wire* base_w = base_str.empty() ? nullptr :
                                         module->wire(RTLIL::escape_id(base_str));
                                     bool base_is_real = base_w != nullptr &&
-                                        !base_w->attributes.count(
-                                            RTLIL::escape_id("is_interface"));
+                                        !base_w->attributes.count(uid(
+                                            RTLIL::escape_id("is_interface")));
 
                                     if (!base_is_real && !full_name.empty() &&
                                         current_signal_temp_wires.count(full_name)) {
@@ -22685,7 +22685,7 @@ void UhdmImporter::import_statement_comb(const any* uhdm_stmt, RTLIL::CaseRule* 
                                     }
                                     if (mode_debug)
                                         uhdm_trace("        Using temp wire %s for signal %s in async reset context (partial=%d)\n",
-                                            temp_wire->name.c_str(), signal_name.c_str(), is_partial ? 1 : 0);
+                                            temp_wire->name.str().c_str(), signal_name.c_str(), is_partial ? 1 : 0);
                                 }
                                 // UNPACKED-array whole-array / slice writes: the
                                 // LHS lowered to a concat of per-element wires
@@ -22808,7 +22808,7 @@ void UhdmImporter::import_statement_comb(const any* uhdm_stmt, RTLIL::CaseRule* 
                                             tw = oit->second;
                                         } else if (current_comb_process) {
                                             RTLIL::IdString wid =
-                                                RTLIL::escape_id(bn);
+                                                uid(RTLIL::escape_id(bn));
                                             for (auto* sy :
                                                  current_comb_process->syncs) {
                                                 for (auto& ua : sy->actions) {
@@ -22821,7 +22821,7 @@ void UhdmImporter::import_statement_comb(const any* uhdm_stmt, RTLIL::CaseRule* 
                                                         *ua.second.chunks().begin();
                                                     if (ulc.wire && urc.wire &&
                                                         ulc.wire->name == wid &&
-                                                        urc.wire->name.c_str()[0] == '$') {
+                                                        urc.wire->name.str().c_str()[0] == '$') {
                                                         tw = urc.wire;
                                                         break;
                                                     }
@@ -23090,7 +23090,7 @@ void UhdmImporter::import_statement_comb(const any* uhdm_stmt, RTLIL::CaseRule* 
                     }
 
                     uhdm_trace("        Created block-local wire %s (temp: %s, width: %d)\n",
-                        block_wire->name.c_str(), temp_wire->name.c_str(), width);
+                        block_wire->name.str().c_str(), temp_wire->name.str().c_str(), width);
                 }
             }
 
@@ -23959,7 +23959,7 @@ void UhdmImporter::import_statement_comb(const any* uhdm_stmt, RTLIL::CaseRule* 
 void UhdmImporter::process_reset_block_for_memory(const UHDM::any* reset_stmt, RTLIL::CaseRule* reset_case) {
     if (!reset_stmt || !reset_case) return;
     
-    uhdm_trace("    Analyzing reset block for memory for-loops (module: %s)\n", module->name.c_str());
+    uhdm_trace("    Analyzing reset block for memory for-loops (module: %s)\n", module->name.str().c_str());
     
     // Check if the reset statement is a begin block
     if (reset_stmt->VpiType() == vpiBegin || reset_stmt->VpiType() == vpiNamedBegin) {
@@ -23991,7 +23991,7 @@ void UhdmImporter::process_reset_block_for_memory(const UHDM::any* reset_stmt, R
                     for (int i = loop_start; i < loop_end; i++) {
                         // Create memory register name: \memory[i]
                         std::string memory_reg_name = "\\memory[" + std::to_string(i) + "]";
-                        RTLIL::IdString memory_reg_id = RTLIL::escape_id(memory_reg_name);
+                        RTLIL::IdString memory_reg_id = uid(RTLIL::escape_id(memory_reg_name));
                         
                         // Create the wire if it doesn't exist
                         if (!module->wire(memory_reg_id)) {
@@ -24088,7 +24088,7 @@ void UhdmImporter::import_initial_interpreted(const process_stmt* uhdm_process, 
         }
         if (!wire) wire = module->wire(RTLIL::escape_id(name));
         if (!wire || wire_to_value.count(wire) ||
-            module->memories.count(RTLIL::escape_id(name)))
+            module->memories.count(uid(RTLIL::escape_id(name))))
             continue;
         auto wit = interp_written_elems_.find(name);
         if (wit == interp_written_elems_.end()) continue;

@@ -359,10 +359,12 @@ std::string UhdmImporter::encode_param_bits32(const std::string& value_type,
 // Set from `read_uhdm -debug` by the UhdmImporter constructor below; read by
 // the uhdm_trace() macro, including from file-scope static helpers.
 bool uhdm_trace_enabled = false;
+RTLIL::Design *uhdm_id_design = nullptr;
 
 UhdmImporter::UhdmImporter(RTLIL::Design *design, bool keep_names, bool debug) :
     design(design), module(nullptr), mode_keep_names(keep_names), mode_debug(debug) {
     uhdm_trace_enabled = debug;
+    uhdm_id_design = design;
 }
 
 // Import entire UHDM design
@@ -694,7 +696,7 @@ void UhdmImporter::import_design(UHDM::design* uhdm_design) {
         for (auto stub : stubs) {
             std::string sname = stub->name.str();              // "\bug3670::RAMB36E1"
             std::string bare = sname.substr(sname.rfind("::") + 2);
-            RTLIL::IdString bare_id = RTLIL::escape_id(bare);
+            RTLIL::IdString bare_id = uid(RTLIL::escape_id(bare));
             for (auto mod : design->modules())
                 for (auto cell : mod->cells())
                     if (cell->type == stub->name)
@@ -714,7 +716,7 @@ void UhdmImporter::import_design(UHDM::design* uhdm_design) {
         for (auto cell : module->cells()) {
             // Check if this is an interface cell by looking at the module it references
             RTLIL::Module* cell_module = design->module(cell->type);
-            if (cell_module && cell_module->attributes.count(RTLIL::escape_id("is_interface"))) {
+            if (cell_module && cell_module->attributes.count(uid(RTLIL::escape_id("is_interface")))) {
                 // This is an interface cell
                 // Look for any wires that connect to this interface from other cells
                 std::string interface_name = cell->name.str();
@@ -725,10 +727,10 @@ void UhdmImporter::import_design(UHDM::design* uhdm_design) {
                 // Look for connection wires with pattern $dummywireforinterface\<interface_name>
                 std::string conn_wire_name = "$dummywireforinterface\\" + interface_name;
                 RTLIL::Wire* conn_wire = module->wire(RTLIL::escape_id(conn_wire_name));
-                if (conn_wire && !conn_wire->attributes.count(RTLIL::escape_id("is_interface"))) {
-                    conn_wire->attributes[RTLIL::escape_id("is_interface")] = RTLIL::Const(1);
+                if (conn_wire && !conn_wire->attributes.count(uid(RTLIL::escape_id("is_interface")))) {
+                    conn_wire->attributes[uid(RTLIL::escape_id("is_interface"))] = RTLIL::Const(1);
                     uhdm_trace("UHDM: Marked wire '%s' as interface connection in module %s\n", 
-                        conn_wire_name.c_str(), module->name.c_str());
+                        conn_wire_name.c_str(), module->name.str().c_str());
                 }
             }
         }
@@ -753,8 +755,8 @@ void UhdmImporter::import_design(UHDM::design* uhdm_design) {
                     for (auto &bit : conn.second) {
                         if (bit.wire && bit.wire->attributes.count(ID::reg)) {
                             uhdm_trace("UHDM: Removing \\reg from wire '%s' in module %s (driven by cell %s port %s)\n",
-                                bit.wire->name.c_str(), mod->name.c_str(),
-                                cell->name.c_str(), conn.first.c_str());
+                                bit.wire->name.str().c_str(), mod->name.str().c_str(),
+                                cell->name.str().c_str(), ustr(conn.first).c_str());
                             bit.wire->attributes.erase(ID::reg);
                         }
                     }
@@ -778,7 +780,7 @@ void UhdmImporter::import_design(UHDM::design* uhdm_design) {
         // (e.g., parameter-only top module) is not a blackbox
         if (is_empty && !module->ports.empty()) {
             module->set_bool_attribute(ID::blackbox);
-            uhdm_trace("UHDM: Module %s has no implementation, marking as blackbox\n", module->name.c_str());
+            uhdm_trace("UHDM: Module %s has no implementation, marking as blackbox\n", module->name.str().c_str());
         }
     }
     
@@ -807,7 +809,7 @@ void UhdmImporter::import_design(UHDM::design* uhdm_design) {
         // Never promote through an INTERFACE instance (see module.cpp): its
         // fields are ordinary flattened wires, not a cross-module reference.
         if (RTLIL::Module* cm = design->module(cell->type))
-            if (cm->attributes.count(RTLIL::escape_id("is_interface"))) continue;
+            if (cm->attributes.count(uid(RTLIL::escape_id("is_interface")))) continue;
         RTLIL::Wire* pw = resolve_xmr_write(mod, cell, sig);
         if (!pw) continue;
         if (val.size() < pw->width) val.extend_u0(pw->width, false);
@@ -854,7 +856,7 @@ void UhdmImporter::import_design(UHDM::design* uhdm_design) {
         log("  Module: %s\n", log_id(mod->name));
         log_flush();
         for (auto wire : mod->wires()) {
-            uhdm_trace("    Wire: %s (width=%d) [raw name: %s]\n", log_id(wire->name), wire->width, wire->name.c_str());
+            uhdm_trace("    Wire: %s (width=%d) [raw name: %s]\n", log_id(wire->name), wire->width, wire->name.str().c_str());
             log_flush();
         }
         for (auto &mem_pair : mod->memories) {
@@ -863,7 +865,7 @@ void UhdmImporter::import_design(UHDM::design* uhdm_design) {
             log_flush();
         }
         for (auto cell : mod->cells()) {
-            uhdm_trace("    Cell: %s (type=%s) [raw name: %s]\n", log_id(cell->name), log_id(cell->type), cell->name.c_str());
+            uhdm_trace("    Cell: %s (type=%s) [raw name: %s]\n", log_id(cell->name), log_id(cell->type), cell->name.str().c_str());
             log_flush();
         }
         for (auto &proc_pair : mod->processes) {
@@ -1955,7 +1957,7 @@ void UhdmImporter::stamp_packed_attrs_from_def(RTLIL::Wire* wire,
                                                const std::string& def_name,
                                                const std::string& var_name,
                                                const UHDM::typespec* elab_at) {
-    if (!wire || wire->attributes.count(RTLIL::escape_id("packed_elem_width")))
+    if (!wire || wire->attributes.count(uid(RTLIL::escape_id("packed_elem_width"))))
         return;
     const UHDM::VectorOfrange* ranges = nullptr;
     if (auto lts = def_elem_match_ts(def_name, var_name, elab_at))
@@ -1973,9 +1975,9 @@ void UhdmImporter::stamp_packed_attrs_from_def(RTLIL::Wire* wire,
     if (outer <= 1 || wire->width % outer != 0) return;
     int ew = wire->width / outer;
     if (ew <= 1) return;
-    wire->attributes[RTLIL::escape_id("packed_elem_width")] = RTLIL::Const(ew);
-    wire->attributes[RTLIL::escape_id("packed_outer_left")] = RTLIL::Const(ol);
-    wire->attributes[RTLIL::escape_id("packed_outer_right")] = RTLIL::Const(orr);
+    wire->attributes[uid(RTLIL::escape_id("packed_elem_width"))] = RTLIL::Const(ew);
+    wire->attributes[uid(RTLIL::escape_id("packed_outer_left"))] = RTLIL::Const(ol);
+    wire->attributes[uid(RTLIL::escape_id("packed_outer_right"))] = RTLIL::Const(orr);
     uhdm_trace("UHDM: def-view packed attrs on '%s': elem=%d outer=[%d:%d]\n",
         var_name.c_str(), ew, ol, orr);
 }
@@ -2051,7 +2053,7 @@ bool UhdmImporter::expr_uses_resolved_param(const any* e) {
     if (e->UhdmType() == uhdmref_obj) {
         std::string n = std::string(any_cast<const ref_obj*>(e)->VpiName());
         return !n.empty() &&
-               module->parameter_default_values.count(RTLIL::escape_id(n)) > 0;
+               module->parameter_default_values.count(uid(RTLIL::escape_id(n))) > 0;
     }
     if (e->UhdmType() == uhdmoperation) {
         auto op = any_cast<const operation*>(e);
@@ -2189,7 +2191,7 @@ void UhdmImporter::import_module_hierarchy(const module_inst* uhdm_module, bool 
                 this->module = parent_rtlil_module;
                 this->name_map.clear();
                 for (auto &wire_pair : parent_rtlil_module->wires_) {
-                    std::string wn = wire_pair.first.str();
+                    std::string wn = ustr(wire_pair.first);
                     if (wn[0] == '\\') wn = wn.substr(1);
                     this->name_map[wn] = wire_pair.second;
                 }
@@ -2212,13 +2214,13 @@ void UhdmImporter::import_module_hierarchy(const module_inst* uhdm_module, bool 
                                         std::string str_val = std::string(c->VpiValue());
                                         if (str_val.substr(0, 7) == "STRING:")
                                             str_val = str_val.substr(7);
-                                        cell->parameters[RTLIL::escape_id(pname)] = RTLIL::Const(str_val);
+                                        cell->parameters[uid(RTLIL::escape_id(pname))] = RTLIL::Const(str_val);
                                         continue;
                                     }
                                 }
                                 RTLIL::SigSpec val = import_expression(any_cast<const expr*>(pa->Rhs()));
                                 if (val.is_fully_const())
-                                    cell->parameters[RTLIL::escape_id(pname)] = val.as_const();
+                                    cell->parameters[uid(RTLIL::escape_id(pname))] = val.as_const();
                             }
                         }
                     }
@@ -2548,7 +2550,7 @@ void UhdmImporter::import_module_hierarchy(const module_inst* uhdm_module, bool 
             }
         }
         
-        RTLIL::IdString mod_id = RTLIL::escape_id(yosys_modname);
+        RTLIL::IdString mod_id = uid(RTLIL::escape_id(yosys_modname));
         module = design->module(mod_id);
         if (!module) {
             // Authoritative name recorded when this signature was first
@@ -2566,17 +2568,17 @@ void UhdmImporter::import_module_hierarchy(const module_inst* uhdm_module, bool 
         }
         if (!module) {
             // Try the original param_signature
-            mod_id = RTLIL::escape_id(param_signature);
+            mod_id = uid(RTLIL::escape_id(param_signature));
             module = design->module(mod_id);
         }
         if (!module) {
             // Try without parameter signature
-            mod_id = RTLIL::escape_id(module_name);
+            mod_id = uid(RTLIL::escape_id(module_name));
             module = design->module(mod_id);
         }
         
         if (module) {
-            uhdm_trace("UHDM: Found existing module %s for instance\n", module->name.c_str());
+            uhdm_trace("UHDM: Found existing module %s for instance\n", module->name.str().c_str());
         } else {
             uhdm_trace("UHDM: WARNING: Could not find module for %s (tried %s)\n", param_signature.c_str(), yosys_modname.c_str());
         }
@@ -2636,7 +2638,7 @@ void UhdmImporter::import_module_hierarchy(const module_inst* uhdm_module, bool 
                         def_base = def_base.substr(ns_pos + 2);
                 }
                 if (!def_base.empty() && def_base[0] == '$') {
-                    RTLIL::IdString icell_id = RTLIL::escape_id(inst_name);
+                    RTLIL::IdString icell_id = uid(RTLIL::escape_id(inst_name));
                     if (!parent_rtlil_module->cell(icell_id)) {
                         RTLIL::Module* saved_module = this->module;
                         auto saved_name_map = this->name_map;
@@ -2644,7 +2646,7 @@ void UhdmImporter::import_module_hierarchy(const module_inst* uhdm_module, bool 
                         this->module = parent_rtlil_module;
                         this->name_map.clear();
                         for (auto &wp : parent_rtlil_module->wires_) {
-                            std::string wn = wp.first.str();
+                            std::string wn = ustr(wp.first);
                             if (wn[0] == '\\') wn = wn.substr(1);
                             this->name_map[wn] = wp.second;
                         }
@@ -2805,7 +2807,7 @@ void UhdmImporter::import_module_hierarchy(const module_inst* uhdm_module, bool 
                 // child cell twice and hit `Assert count_id(cell->name) == 0`
                 // in addCell.  Skip the second creation — the cell from the
                 // first walk already has its ports wired.
-                RTLIL::IdString cell_id = RTLIL::escape_id(inst_name);
+                RTLIL::IdString cell_id = uid(RTLIL::escape_id(inst_name));
                 if (parent_rtlil_module->cell(cell_id)) {
                     uhdm_trace("UHDM: Cell %s already exists in %s — skipping duplicate "
                         "creation (likely a second hierarchy view introduced by `bind`)\n",
@@ -2821,7 +2823,7 @@ void UhdmImporter::import_module_hierarchy(const module_inst* uhdm_module, bool 
                 // Build name_map for parent module
                 this->name_map.clear();
                 for (auto &wire_pair : parent_rtlil_module->wires_) {
-                    std::string wire_name = wire_pair.first.str();
+                    std::string wire_name = ustr(wire_pair.first);
                     if (wire_name[0] == '\\') wire_name = wire_name.substr(1);
                     this->name_map[wire_name] = wire_pair.second;
                 }
@@ -2937,7 +2939,7 @@ void UhdmImporter::import_module_hierarchy(const module_inst* uhdm_module, bool 
                                 if (tgt_mod) {
                                     std::string tgt_prefix = "\\" + port_name + ".";
                                     for (auto& w : tgt_mod->wires_) {
-                                        std::string wn = w.first.str();
+                                        std::string wn = ustr(w.first);
                                         if (wn.compare(0, tgt_prefix.size(), tgt_prefix) == 0)
                                             field_names.push_back(wn.substr(tgt_prefix.size()));
                                     }
@@ -2997,7 +2999,7 @@ void UhdmImporter::import_module_hierarchy(const module_inst* uhdm_module, bool 
                                 std::vector<std::string> field_names;
                                 if (!src_name.empty())
                                     for (auto& w : tgt_mod->wires_) {
-                                        std::string wn = w.first.str();
+                                        std::string wn = ustr(w.first);
                                         if (wn.compare(0, tgt_prefix.size(), tgt_prefix) == 0)
                                             field_names.push_back(wn.substr(tgt_prefix.size()));
                                     }
@@ -3051,7 +3053,7 @@ void UhdmImporter::import_module_hierarchy(const module_inst* uhdm_module, bool 
                                         std::string src_name = base + "[" + std::to_string(lo + k) + "]";
                                         std::string tgt_prefix = "\\" + port_name + "[" + std::to_string(k) + "].";
                                         for (auto& w : tgt_mod->wires_) {
-                                            std::string wn = w.first.str();
+                                            std::string wn = ustr(w.first);
                                             if (wn.compare(0, tgt_prefix.size(), tgt_prefix) != 0) continue;
                                             std::string f = wn.substr(tgt_prefix.size());
                                             std::string src_full = src_name + "." + f;
@@ -3093,8 +3095,8 @@ void UhdmImporter::import_module_hierarchy(const module_inst* uhdm_module, bool 
                             bool tgt_is_iface_port =
                                 tgt_mod &&
                                 (!tgt_pw ||
-                                 tgt_pw->attributes.count(
-                                     RTLIL::escape_id("is_interface")));
+                                 tgt_pw->attributes.count(uid(
+                                     RTLIL::escape_id("is_interface"))));
                             if (tgt_is_iface_port &&
                                 port->High_conn()->UhdmType() == uhdmhier_path) {
                                 const hier_path* hp =
@@ -3106,7 +3108,7 @@ void UhdmImporter::import_module_hierarchy(const module_inst* uhdm_module, bool 
                                 if (tgt_mod && !src_name.empty()) {
                                     std::string tgt_prefix = "\\" + port_name + ".";
                                     for (auto& w : tgt_mod->wires_) {
-                                        std::string wn = w.first.str();
+                                        std::string wn = ustr(w.first);
                                         if (wn.compare(0, tgt_prefix.size(), tgt_prefix) == 0)
                                             field_names.push_back(wn.substr(tgt_prefix.size()));
                                     }
@@ -3318,7 +3320,7 @@ void UhdmImporter::import_module_hierarchy(const module_inst* uhdm_module, bool 
                                 if (found && nmatch == 1) {
                                     conn = RTLIL::SigSpec(found);
                                     uhdm_trace("UHDM: interface-signal port %s -> %s\n",
-                                        port_name.c_str(), found->name.c_str());
+                                        port_name.c_str(), found->name.str().c_str());
                                 }
                             }
 
@@ -3349,7 +3351,7 @@ void UhdmImporter::import_module_hierarchy(const module_inst* uhdm_module, bool 
                                     uhdm_trace("UHDM: port %s part-select under-resolved "
                                         "(%d bits); using base %s[%d:0]\n",
                                         port_name.c_str(), ch.width,
-                                        ch.wire->name.c_str(), pw->width - 1);
+                                        ch.wire->name.str().c_str(), pw->width - 1);
                                 }
                             }
 
@@ -3470,7 +3472,7 @@ void UhdmImporter::create_parameterized_modules() {
                 
                 if (mode_debug)
                     uhdm_trace("    Found parameterized cell %s/%s: %s with WIDTH=%d\n", 
-                        mod->name.c_str(), cell->name.c_str(), base_module.c_str(), width);
+                        mod->name.str().c_str(), cell->name.str().c_str(), base_module.c_str(), width);
             }
         }
     }
@@ -3491,7 +3493,7 @@ void UhdmImporter::create_parameterized_modules() {
             std::string param_value = stringf("s32'%s", RTLIL::Const(width, 32).as_string().c_str());
             std::string param_module_name = stringf("$paramod\\%s\\WIDTH=%s", base_module_name.c_str(), param_value.c_str());
             
-            RTLIL::IdString param_mod_id = RTLIL::escape_id(param_module_name);
+            RTLIL::IdString param_mod_id = uid(RTLIL::escape_id(param_module_name));
             if (design->module(param_mod_id)) {
                 // Already exists
                 continue;
@@ -3508,11 +3510,11 @@ void UhdmImporter::create_parameterized_modules() {
             param_mod->parameter_default_values = base_mod->parameter_default_values;
             
             // Add hdlname attribute with the original module name
-            param_mod->attributes[RTLIL::escape_id("hdlname")] = RTLIL::Const(base_module_name);
-            param_mod->attributes[RTLIL::escape_id("dynports")] = RTLIL::Const(1);
+            param_mod->attributes[uid(RTLIL::escape_id("hdlname"))] = RTLIL::Const(base_module_name);
+            param_mod->attributes[uid(RTLIL::escape_id("dynports"))] = RTLIL::Const(1);
             
             // Update the WIDTH parameter
-            RTLIL::IdString width_param = RTLIL::escape_id("WIDTH");
+            RTLIL::IdString width_param = uid(RTLIL::escape_id("WIDTH"));
             param_mod->parameter_default_values[width_param] = RTLIL::Const(width, 32);
             
             // Wire mapping for connection updates
@@ -3541,7 +3543,7 @@ void UhdmImporter::create_parameterized_modules() {
                 
                 // Update width-related parameters
                 for (auto &param_pair : param_cell->parameters) {
-                    if (param_pair.first.in("\\A_WIDTH", "\\B_WIDTH", "\\Y_WIDTH")) {
+                    if (param_pair.first.in(ID::A_WIDTH, ID::B_WIDTH, ID::Y_WIDTH)) {
                         param_pair.second = RTLIL::Const(width, 32);
                     }
                 }
@@ -3562,7 +3564,7 @@ void UhdmImporter::create_parameterized_modules() {
                                     mapped_sig.append(RTLIL::SigChunk(mapped_wire, chunk.offset, chunk.width));
                                 }
                             } else {
-                                log_warning("Wire mapping not found for %s\n", chunk.wire->name.c_str());
+                                log_warning("Wire mapping not found for %s\n", chunk.wire->name.str().c_str());
                                 mapped_sig.append(chunk);
                             }
                         } else {
@@ -3632,14 +3634,14 @@ void UhdmImporter::create_parameterized_modules() {
                 std::string param_module_name = stringf("$paramod\\%s\\WIDTH=%s", base_module.c_str(), param_value.c_str());
                 
                 // Update cell type to reference parameterized module
-                cell->type = RTLIL::escape_id(param_module_name);
+                cell->type = uid(RTLIL::escape_id(param_module_name));
                 
                 // Remove the WIDTH parameter from the cell (it's now part of the module name)
-                cell->parameters.erase(RTLIL::escape_id("WIDTH"));
+                cell->parameters.erase(uid(RTLIL::escape_id("WIDTH")));
                 
                 if (mode_debug)
                     uhdm_trace("    Updated cell %s/%s to use module %s\n", 
-                        mod->name.c_str(), cell->name.c_str(), param_module_name.c_str());
+                        mod->name.str().c_str(), cell->name.str().c_str(), param_module_name.c_str());
             }
         }
     }
@@ -3683,7 +3685,7 @@ RTLIL::Wire* UhdmImporter::materialize_flat_struct_array(
     int total_w = row_w * array_size;
     uhdm_trace("UHDM: flat struct-array '%s': rows=%d row_w=%d total=%d\n",
         name.c_str(), array_size, row_w, total_w);
-    RTLIL::IdString flat_id = RTLIL::escape_id(name);
+    RTLIL::IdString flat_id = uid(RTLIL::escape_id(name));
     RTLIL::Wire* flat_wire = module->wire(flat_id);
     if (flat_wire && flat_wire->width != total_w) {
         // An on-demand reference created a placeholder (1-bit) wire before
@@ -3701,15 +3703,15 @@ RTLIL::Wire* UhdmImporter::materialize_flat_struct_array(
         wire_map[inner_obj] = flat_wire;
     }
     if (ranges->size() == 2 && inner_count > 1) {
-        flat_wire->attributes[RTLIL::escape_id("unpacked_elem_width")] = RTLIL::Const(elem_w);
-        flat_wire->attributes[RTLIL::escape_id("unpacked_outer_low")]  = RTLIL::Const(array_low);
-        flat_wire->attributes[RTLIL::escape_id("unpacked_outer_size")] = RTLIL::Const(array_size);
-        flat_wire->attributes[RTLIL::escape_id("unpacked_inner_low")]  = RTLIL::Const(inner_low);
-        flat_wire->attributes[RTLIL::escape_id("unpacked_inner_size")] = RTLIL::Const(inner_count);
+        flat_wire->attributes[uid(RTLIL::escape_id("unpacked_elem_width"))] = RTLIL::Const(elem_w);
+        flat_wire->attributes[uid(RTLIL::escape_id("unpacked_outer_low"))]  = RTLIL::Const(array_low);
+        flat_wire->attributes[uid(RTLIL::escape_id("unpacked_outer_size"))] = RTLIL::Const(array_size);
+        flat_wire->attributes[uid(RTLIL::escape_id("unpacked_inner_low"))]  = RTLIL::Const(inner_low);
+        flat_wire->attributes[uid(RTLIL::escape_id("unpacked_inner_size"))] = RTLIL::Const(inner_count);
     }
     for (int i = 0; i < array_size; i++) {
         std::string ename = name + "[" + std::to_string(array_low + i) + "]";
-        RTLIL::IdString eid = RTLIL::escape_id(ename);
+        RTLIL::IdString eid = uid(RTLIL::escape_id(ename));
         if (!module->wire(eid)) {
             RTLIL::Wire* ew = module->addWire(eid, row_w);
             add_src_attribute(ew->attributes, src_obj);
@@ -4450,10 +4452,10 @@ void UhdmImporter::import_module(const module_inst* uhdm_module) {
     // specialization) so a nested child cell can target the correct parent.
     inst_to_modname_[uhdm_module] = modname;
 
-    RTLIL::IdString mod_id = RTLIL::escape_id(modname);
+    RTLIL::IdString mod_id = uid(RTLIL::escape_id(modname));
     
     if (mode_debug)
-        log("Importing module: %s (ID: %s)\n", modname.c_str(), mod_id.c_str());
+        log("Importing module: %s (ID: %s)\n", modname.c_str(), ustr(mod_id).c_str());
     
     // Check if module already exists (e.g., from AllModules import)
     if (design->module(mod_id)) {
@@ -4657,7 +4659,7 @@ void UhdmImporter::import_module(const module_inst* uhdm_module) {
                             current_instance = saved_ci2;
                             if (pv.is_fully_const() && pv.is_fully_def() && pv.size() > 0) {
                                 uhdm_trace("UHDM: parameter '%s' override evaluated in parent %s\n",
-                                    param_name.c_str(), pmod->name.c_str());
+                                    param_name.c_str(), pmod->name.str().c_str());
                                 value_spec = pv;
                             }
                         }
@@ -4739,7 +4741,7 @@ void UhdmImporter::import_module(const module_inst* uhdm_module) {
                         param_value = relayout_function_unpacked_table(
                             param_assign->Lhs(), rhs_expr, param_value, param_name);
                         // Override the parameter value
-                        RTLIL::IdString param_id = RTLIL::escape_id(param_name);
+                        RTLIL::IdString param_id = uid(RTLIL::escape_id(param_name));
                         // Only make non-localparam parameters externally visible
                         if (auto lhs_param = dynamic_cast<const parameter*>(param_assign->Lhs())) {
                             if (!lhs_param->VpiLocalParam()) {
@@ -5498,7 +5500,7 @@ void UhdmImporter::import_module(const module_inst* uhdm_module) {
                         uhdm_trace("UHDM: Array_var '%s' whole/multi-dim — flat wire "
                             "(rows=%d, row_w=%d, total=%d) + per-row slices\n",
                             array_name.c_str(), array_size, row_w, total_w);
-                        RTLIL::IdString flat_id = RTLIL::escape_id(array_name);
+                        RTLIL::IdString flat_id = uid(RTLIL::escape_id(array_name));
                         RTLIL::Wire* flat_wire = module->wire(flat_id);
                         if (!flat_wire) {
                             flat_wire = module->addWire(flat_id, total_w);
@@ -5506,11 +5508,11 @@ void UhdmImporter::import_module(const module_inst* uhdm_module) {
                             name_map[array_name] = flat_wire;
                             if (inner_var) wire_map[inner_var] = flat_wire;
                             if (ranges->size() == 2 && inner_count > 1) {
-                                flat_wire->attributes[RTLIL::escape_id("unpacked_elem_width")] = RTLIL::Const(elem_w);
-                                flat_wire->attributes[RTLIL::escape_id("unpacked_outer_low")]  = RTLIL::Const(array_low);
-                                flat_wire->attributes[RTLIL::escape_id("unpacked_outer_size")] = RTLIL::Const(array_size);
-                                flat_wire->attributes[RTLIL::escape_id("unpacked_inner_low")]  = RTLIL::Const(inner_low);
-                                flat_wire->attributes[RTLIL::escape_id("unpacked_inner_size")] = RTLIL::Const(inner_count);
+                                flat_wire->attributes[uid(RTLIL::escape_id("unpacked_elem_width"))] = RTLIL::Const(elem_w);
+                                flat_wire->attributes[uid(RTLIL::escape_id("unpacked_outer_low"))]  = RTLIL::Const(array_low);
+                                flat_wire->attributes[uid(RTLIL::escape_id("unpacked_outer_size"))] = RTLIL::Const(array_size);
+                                flat_wire->attributes[uid(RTLIL::escape_id("unpacked_inner_low"))]  = RTLIL::Const(inner_low);
+                                flat_wire->attributes[uid(RTLIL::escape_id("unpacked_inner_size"))] = RTLIL::Const(inner_count);
                             }
                         }
                         // Alias direction: normally element ← flat (a whole-
@@ -5540,7 +5542,7 @@ void UhdmImporter::import_module(const module_inst* uhdm_module) {
                         for (int i = 0; i < array_size; i++) {
                             std::string ename =
                                 array_name + "[" + std::to_string(array_low + i) + "]";
-                            RTLIL::IdString eid = RTLIL::escape_id(ename);
+                            RTLIL::IdString eid = uid(RTLIL::escape_id(ename));
                             if (!module->wire(eid)) {
                                 RTLIL::Wire* ew = module->addWire(eid, row_w);
                                 add_src_attribute(ew->attributes, array_var);
@@ -5639,13 +5641,13 @@ void UhdmImporter::import_module(const module_inst* uhdm_module) {
                                 ats->Elem_typespec()->Actual_typespec(), current_instance);
                         for (int i = 0; ts_size > 0 && ts_width > 0 && i < ts_size; i++) {
                             std::string ename = array_name + "[" + std::to_string(ts_low + i) + "]";
-                            RTLIL::IdString eid = RTLIL::escape_id(ename);
+                            RTLIL::IdString eid = uid(RTLIL::escape_id(ename));
                             if (!module->wire(eid)) {
                                 RTLIL::Wire* ew = module->addWire(eid, ts_width);
                                 add_src_attribute(ew->attributes, array_var);
                                 name_map[ename] = ew;
                                 uhdm_trace("UHDM: Created wire '%s' (width=%d) for array element\n",
-                                    ew->name.c_str(), ts_width);
+                                    ew->name.str().c_str(), ts_width);
                             }
                         }
                     }
@@ -5691,12 +5693,12 @@ void UhdmImporter::import_module(const module_inst* uhdm_module) {
                         // on a stray wire that then latches).
                         for (int i = array_low; i < array_low + array_size; i++) {
                             std::string element_name = array_name + "[" + std::to_string(i) + "]";
-                            RTLIL::IdString wire_id = RTLIL::escape_id(element_name);
+                            RTLIL::IdString wire_id = uid(RTLIL::escape_id(element_name));
                             if (!module->wire(wire_id)) {
                                 RTLIL::Wire* wire = module->addWire(wire_id, element_width);
                                 add_src_attribute(wire->attributes, array_var);
                                 name_map[element_name] = wire;
-                                uhdm_trace("UHDM: Created wire '%s' (width=%d) for array element\n", wire->name.c_str(), element_width);
+                                uhdm_trace("UHDM: Created wire '%s' (width=%d) for array element\n", wire->name.str().c_str(), element_width);
                             }
                         }
                     }
@@ -5742,14 +5744,14 @@ void UhdmImporter::import_module(const module_inst* uhdm_module) {
                         std::vector<RTLIL::Wire*> element_wires(array_size, nullptr);
                         for (int i = 0; i < array_size; i++) {
                             std::string element_name = array_name + "[" + std::to_string(array_low + i) + "]";
-                            RTLIL::IdString wire_id = RTLIL::escape_id(element_name);
+                            RTLIL::IdString wire_id = uid(RTLIL::escape_id(element_name));
                             if (!module->wire(wire_id)) {
                                 RTLIL::Wire* wire = module->addWire(wire_id, element_width);
                                 add_src_attribute(wire->attributes, var);
                                 name_map[element_name] = wire;
                                 element_wires[i] = wire;
                                 uhdm_trace("UHDM: Created wire '%s' (width=%d) for unpacked-array_var element\n",
-                                    wire->name.c_str(), element_width);
+                                    wire->name.str().c_str(), element_width);
                             } else {
                                 element_wires[i] = module->wire(wire_id);
                             }
@@ -5888,14 +5890,14 @@ void UhdmImporter::import_module(const module_inst* uhdm_module) {
                         }
                         uhdm_trace("UHDM: Array_var '%s' has whole-array or multi-dim access, creating %d-bit wire (from typespec)\n",
                             array_name.c_str(), width);
-                        RTLIL::IdString wire_id = RTLIL::escape_id(array_name);
+                        RTLIL::IdString wire_id = uid(RTLIL::escape_id(array_name));
                         if (!module->wire(wire_id)) {
                             RTLIL::Wire* wire = module->addWire(wire_id, width);
                             wire_map[var] = wire;
                             name_map[array_name] = wire;
                             add_src_attribute(wire->attributes, var);
                             uhdm_trace("UHDM: Created wire '%s' (width=%d) for array_var\n",
-                                wire->name.c_str(), width);
+                                wire->name.str().c_str(), width);
 
                             // Stash multi-dim metadata on the wire so
                             // `var_select`'s constant-index resolver can
@@ -5926,11 +5928,11 @@ void UhdmImporter::import_module(const module_inst* uhdm_module) {
                                 if (elem_w > 0 &&
                                     eval_range(0, outer_low, outer_size) &&
                                     eval_range(1, inner_low, inner_size)) {
-                                    wire->attributes[RTLIL::escape_id("unpacked_elem_width")] = RTLIL::Const(elem_w);
-                                    wire->attributes[RTLIL::escape_id("unpacked_outer_low")]  = RTLIL::Const(outer_low);
-                                    wire->attributes[RTLIL::escape_id("unpacked_outer_size")] = RTLIL::Const(outer_size);
-                                    wire->attributes[RTLIL::escape_id("unpacked_inner_low")]  = RTLIL::Const(inner_low);
-                                    wire->attributes[RTLIL::escape_id("unpacked_inner_size")] = RTLIL::Const(inner_size);
+                                    wire->attributes[uid(RTLIL::escape_id("unpacked_elem_width"))] = RTLIL::Const(elem_w);
+                                    wire->attributes[uid(RTLIL::escape_id("unpacked_outer_low"))]  = RTLIL::Const(outer_low);
+                                    wire->attributes[uid(RTLIL::escape_id("unpacked_outer_size"))] = RTLIL::Const(outer_size);
+                                    wire->attributes[uid(RTLIL::escape_id("unpacked_inner_low"))]  = RTLIL::Const(inner_low);
+                                    wire->attributes[uid(RTLIL::escape_id("unpacked_inner_size"))] = RTLIL::Const(inner_size);
                                 }
                             }
 
@@ -5957,7 +5959,7 @@ void UhdmImporter::import_module(const module_inst* uhdm_module) {
                                     // importer already.
                                     if ((init_op->VpiOpType() == vpiAssignmentPatternOp ||
                                          init_op->VpiOpType() == vpiMultiAssignmentPatternOp) &&
-                                        !wire->attributes.count(RTLIL::escape_id("unpacked_elem_width"))) {
+                                        !wire->attributes.count(uid(RTLIL::escape_id("unpacked_elem_width")))) {
                                         const UHDM::array_typespec* ats1 = nullptr;
                                         if (array_var->Typespec())
                                             ats1 = dynamic_cast<const UHDM::array_typespec*>(array_var->Typespec()->Actual_typespec());
@@ -5998,11 +6000,11 @@ void UhdmImporter::import_module(const module_inst* uhdm_module) {
                                     }
                                     if ((init_op->VpiOpType() == vpiAssignmentPatternOp ||
                                          init_op->VpiOpType() == vpiMultiAssignmentPatternOp) &&
-                                        wire->attributes.count(RTLIL::escape_id("unpacked_elem_width"))) {
+                                        wire->attributes.count(uid(RTLIL::escape_id("unpacked_elem_width")))) {
                                         int elem_w = wire->attributes
-                                            .at(RTLIL::escape_id("unpacked_elem_width")).as_int();
+                                            .at(uid(RTLIL::escape_id("unpacked_elem_width"))).as_int();
                                         int inner_sz = wire->attributes
-                                            .at(RTLIL::escape_id("unpacked_inner_size")).as_int();
+                                            .at(uid(RTLIL::escape_id("unpacked_inner_size"))).as_int();
                                         // Pattern row/col 0 maps to the FIRST
                                         // declared index — the HIGHEST for a
                                         // descending dim (`[1:0]`), the lowest
@@ -6071,7 +6073,7 @@ void UhdmImporter::import_module(const module_inst* uhdm_module) {
                 uhdm_trace("UHDM: Importing variable '%s' (width=%d)\n", var_name.c_str(), width);
                 
                 // Check if this wire already exists (might have been created as a port)
-                RTLIL::IdString wire_id = RTLIL::escape_id(var_name);
+                RTLIL::IdString wire_id = uid(RTLIL::escape_id(var_name));
                 if (!module->wire(wire_id)) {
                     RTLIL::Wire* wire = module->addWire(wire_id, width);
                     wire_map[var] = wire;
@@ -6146,11 +6148,11 @@ void UhdmImporter::import_module(const module_inst* uhdm_module) {
                         }
                         if (elem_w > 1 && outer_l >= 0 && outer_r >= 0) {
                             if (leaf_w > 1 && leaf_w < elem_w &&
-                                !wire->attributes.count(RTLIL::escape_id("packed_leaf_width")))
-                                wire->attributes[RTLIL::escape_id("packed_leaf_width")] = RTLIL::Const(leaf_w);
-                            wire->attributes[RTLIL::escape_id("packed_elem_width")] = RTLIL::Const(elem_w);
-                            wire->attributes[RTLIL::escape_id("packed_outer_left")] = RTLIL::Const(outer_l);
-                            wire->attributes[RTLIL::escape_id("packed_outer_right")] = RTLIL::Const(outer_r);
+                                !wire->attributes.count(uid(RTLIL::escape_id("packed_leaf_width"))))
+                                wire->attributes[uid(RTLIL::escape_id("packed_leaf_width"))] = RTLIL::Const(leaf_w);
+                            wire->attributes[uid(RTLIL::escape_id("packed_elem_width"))] = RTLIL::Const(elem_w);
+                            wire->attributes[uid(RTLIL::escape_id("packed_outer_left"))] = RTLIL::Const(outer_l);
+                            wire->attributes[uid(RTLIL::escape_id("packed_outer_right"))] = RTLIL::Const(outer_r);
                             uhdm_trace("UHDM: packed_array_var '%s' elem_width=%d outer=[%d:%d]\n",
                                 var_name.c_str(), elem_w, outer_l, outer_r);
                         }
@@ -6187,13 +6189,13 @@ void UhdmImporter::import_module(const module_inst* uhdm_module) {
                                      attr_name == "allconst" || attr_name == "allseq"))
                                     continue;
                                 // Set the attribute value using import_attribute_value
-                                wire->attributes[RTLIL::escape_id(attr_name)] = import_attribute_value(attr);
+                                wire->attributes[uid(RTLIL::escape_id(attr_name))] = import_attribute_value(attr);
                                 if (mode_debug)
                                     uhdm_trace("UHDM: Added attribute '%s' to variable '%s'\n", attr_name.c_str(), var_name.c_str());
                             }
                             if (!formal_cell.empty()) {
                                 std::string cell_name = formal_cell + "$" +
-                                                        std::to_string(autoidx++);
+                                                        std::to_string(uhdm_id_design->twines().next_autoidx());
                                 RTLIL::Cell* cell = module->addCell(
                                     RTLIL::escape_id(cell_name),
                                     RTLIL::escape_id(formal_cell));
@@ -6203,7 +6205,7 @@ void UhdmImporter::import_module(const module_inst* uhdm_module) {
                                 // Yosys's Verilog frontend tags the cell with
                                 // `(* reg = "<varname>" *)` so the synthesized
                                 // netlist remembers the originating register.
-                                cell->attributes[RTLIL::escape_id("reg")] =
+                                cell->attributes[uid(RTLIL::escape_id("reg"))] =
                                     RTLIL::Const(var_name);
                                 if (mode_debug)
                                     uhdm_trace("UHDM: Created %s cell '%s' driving wire '%s' (WIDTH=%d)\n",
@@ -6233,13 +6235,13 @@ void UhdmImporter::import_module(const module_inst* uhdm_module) {
                                         }
                                         
                                         if (!type_name.empty()) {
-                                            wire->attributes[RTLIL::escape_id("wiretype")] = RTLIL::escape_id(type_name);
-                                            uhdm_trace("UHDM: Added wiretype attribute '\\%s' to enum variable '%s'\n", type_name.c_str(), wire->name.c_str());
+                                            wire->attributes[uid(RTLIL::escape_id("wiretype"))] = RTLIL::escape_id(type_name);
+                                            uhdm_trace("UHDM: Added wiretype attribute '\\%s' to enum variable '%s'\n", type_name.c_str(), wire->name.str().c_str());
                                         }
                                         
                                         // Add enum_type attribute
                                         std::string enum_type_id = "$enum0";  // Use a consistent naming like Yosys does
-                                        wire->attributes[RTLIL::escape_id("enum_type")] = RTLIL::Const(enum_type_id);
+                                        wire->attributes[uid(RTLIL::escape_id("enum_type"))] = RTLIL::Const(enum_type_id);
                                         
                                         // Add enum value attributes
                                         if (enum_ts->Enum_consts()) {
@@ -6259,9 +6261,9 @@ void UhdmImporter::import_module(const module_inst* uhdm_module) {
                                                 }
                                                 
                                                 // Set the attribute value to the enum constant name
-                                                wire->attributes[RTLIL::escape_id(attr_name)] = RTLIL::Const("\\" + const_name);
+                                                wire->attributes[uid(RTLIL::escape_id(attr_name))] = RTLIL::Const("\\" + const_name);
                                                 uhdm_trace("UHDM: Added enum attribute %s = \\%s to enum variable '%s'\n", 
-                                                    attr_name.c_str(), const_name.c_str(), wire->name.c_str());
+                                                    attr_name.c_str(), const_name.c_str(), wire->name.str().c_str());
                                             }
                                         }
                                     }
@@ -6291,8 +6293,8 @@ void UhdmImporter::import_module(const module_inst* uhdm_module) {
                                 
                                 // Add wiretype attribute for any typedef'd type
                                 if (!wiretype_name.empty()) {
-                                    wire->attributes[RTLIL::escape_id("wiretype")] = RTLIL::escape_id(wiretype_name);
-                                    uhdm_trace("UHDM: Added wiretype attribute '\\%s' to wire '%s'\n", wiretype_name.c_str(), wire->name.c_str());
+                                    wire->attributes[uid(RTLIL::escape_id("wiretype"))] = RTLIL::escape_id(wiretype_name);
+                                    uhdm_trace("UHDM: Added wiretype attribute '\\%s' to wire '%s'\n", wiretype_name.c_str(), wire->name.str().c_str());
                                 }
 
                                 // Packed-array ELEMENT metadata for a module
@@ -6311,7 +6313,7 @@ void UhdmImporter::import_module(const module_inst* uhdm_module) {
                                     if (lts->Elem_typespec() &&
                                         lts->Elem_typespec()->Actual_typespec() &&
                                         lts->Ranges() && lts->Ranges()->size() == 1 &&
-                                        !wire->attributes.count(RTLIL::escape_id("packed_elem_width"))) {
+                                        !wire->attributes.count(uid(RTLIL::escape_id("packed_elem_width")))) {
                                         int ew = get_width_from_typespec(
                                             lts->Elem_typespec()->Actual_typespec(), current_instance);
                                         auto r0 = (*lts->Ranges())[0];
@@ -6342,11 +6344,11 @@ void UhdmImporter::import_module(const module_inst* uhdm_module) {
                                         // synchronizer's consistency check never passed
                                         // (caliptra-ss dev_entropy's rate never updated).
                                         if (ew > 1 && ne >= 1 && ew * ne == wire->width) {
-                                            wire->attributes[RTLIL::escape_id("packed_elem_width")] = RTLIL::Const(ew);
-                                            wire->attributes[RTLIL::escape_id("packed_outer_left")] = RTLIL::Const(ol);
-                                            wire->attributes[RTLIL::escape_id("packed_outer_right")] = RTLIL::Const(orr);
+                                            wire->attributes[uid(RTLIL::escape_id("packed_elem_width"))] = RTLIL::Const(ew);
+                                            wire->attributes[uid(RTLIL::escape_id("packed_outer_left"))] = RTLIL::Const(ol);
+                                            wire->attributes[uid(RTLIL::escape_id("packed_outer_right"))] = RTLIL::Const(orr);
                                             uhdm_trace("UHDM: tagged var '%s' packed_elem_width=%d outer=[%d:%d]\n",
-                                                wire->name.c_str(), ew, ol, orr);
+                                                wire->name.str().c_str(), ew, ol, orr);
                                         }
                                     }
                                 }
@@ -6422,7 +6424,7 @@ void UhdmImporter::import_module(const module_inst* uhdm_module) {
                                     wiretype_name = std::string(ref_ts->VpiName());
                             }
                             if (!wiretype_name.empty()) {
-                                wire->attributes[RTLIL::escape_id("wiretype")] = RTLIL::escape_id(wiretype_name);
+                                wire->attributes[uid(RTLIL::escape_id("wiretype"))] = RTLIL::escape_id(wiretype_name);
                                 uhdm_trace("UHDM: Added wiretype attribute '\\%s' to union_var '%s'\n", wiretype_name.c_str(), var_name.c_str());
                             }
                         }
@@ -6463,8 +6465,8 @@ void UhdmImporter::import_module(const module_inst* uhdm_module) {
                     // Without it `x[hi:lo]` was read as a BIT range — CVA6
                     // scoreboard's `issue_pointer[NrIssuePorts-1:0]` yielded
                     // {0, bits[1:0]} instead of elements 0..1.
-                    if (wire && !wire->attributes.count(
-                            RTLIL::escape_id("packed_elem_width"))) {
+                    if (wire && !wire->attributes.count(uid(
+                            RTLIL::escape_id("packed_elem_width")))) {
                         const UHDM::VectorOfrange* vr = nullptr;
                         if (auto ve = dynamic_cast<const UHDM::expr*>(var))
                             if (auto vts = ve->Typespec())
@@ -6482,18 +6484,18 @@ void UhdmImporter::import_module(const module_inst* uhdm_module) {
                                 if (osz >= 1 && wire->width > 0 &&
                                     wire->width % osz == 0 &&
                                     (wire->width / osz) > 1) {
-                                    wire->attributes[RTLIL::escape_id("packed_elem_width")] =
+                                    wire->attributes[uid(RTLIL::escape_id("packed_elem_width"))] =
                                         RTLIL::Const(wire->width / osz);
-                                    wire->attributes[RTLIL::escape_id("packed_outer_left")] =
+                                    wire->attributes[uid(RTLIL::escape_id("packed_outer_left"))] =
                                         RTLIL::Const(ol);
-                                    wire->attributes[RTLIL::escape_id("packed_outer_right")] =
+                                    wire->attributes[uid(RTLIL::escape_id("packed_outer_right"))] =
                                         RTLIL::Const(orr);
                                 }
                             }
                         }
                     }
 
-                    uhdm_trace("UHDM: Created wire '%s' for variable\n", wire->name.c_str());
+                    uhdm_trace("UHDM: Created wire '%s' for variable\n", wire->name.str().c_str());
                 } else {
                     // Wire already exists, but check if we need to handle initial expression
                     RTLIL::Wire* existing_wire = module->wire(wire_id);
@@ -6521,10 +6523,10 @@ void UhdmImporter::import_module(const module_inst* uhdm_module) {
         if (uhdm_module->Nets()) {
             for (auto uhdm_net : *uhdm_module->Nets()) {
                 if (!uhdm_net->VpiSigned()) continue;
-                RTLIL::IdString wid = RTLIL::escape_id(std::string(uhdm_net->VpiName()));
+                RTLIL::IdString wid = uid(RTLIL::escape_id(std::string(uhdm_net->VpiName())));
                 RTLIL::Wire* w = module->wire(wid);
                 if (w && !w->is_signed) {
-                    uhdm_trace("UHDM: Pre-pass: setting is_signed on '%s' from net VpiSigned\n", wid.c_str());
+                    uhdm_trace("UHDM: Pre-pass: setting is_signed on '%s' from net VpiSigned\n", ustr(wid).c_str());
                     w->is_signed = true;
                 }
             }
@@ -6550,9 +6552,9 @@ void UhdmImporter::import_module(const module_inst* uhdm_module) {
                             if (!init_value.is_fully_const() && init_value.is_wire()) {
                                 // Try to get the init value from the referenced wire
                                 RTLIL::Wire* ref_wire = init_value.as_wire();
-                                if (ref_wire && ref_wire->attributes.count(RTLIL::escape_id("init"))) {
-                                    init_value = RTLIL::SigSpec(ref_wire->attributes.at(RTLIL::escape_id("init")));
-                                    uhdm_trace("UHDM: Resolved initial value from referenced wire '%s'\n", ref_wire->name.c_str());
+                                if (ref_wire && ref_wire->attributes.count(uid(RTLIL::escape_id("init")))) {
+                                    init_value = RTLIL::SigSpec(ref_wire->attributes.at(uid(RTLIL::escape_id("init"))));
+                                    uhdm_trace("UHDM: Resolved initial value from referenced wire '%s'\n", ref_wire->name.str().c_str());
                                 }
                             }
                             
@@ -6580,7 +6582,7 @@ void UhdmImporter::import_module(const module_inst* uhdm_module) {
                             }
                             
                             if (init_value.is_fully_const()) {
-                                wire->attributes[RTLIL::escape_id("init")] = init_value.as_const();
+                                wire->attributes[uid(RTLIL::escape_id("init"))] = init_value.as_const();
                                 uhdm_trace("UHDM: Set init attribute for enum variable '%s' to %s\n", 
                                     var_name.c_str(), init_value.as_const().as_string().c_str());
                             } else {
@@ -6666,7 +6668,7 @@ void UhdmImporter::import_module(const module_inst* uhdm_module) {
 
                         if (init_value.is_fully_const()) {
                             // Set \init attribute for simulation/FF initial value
-                            wire->attributes[RTLIL::escape_id("init")] = init_value.as_const();
+                            wire->attributes[uid(RTLIL::escape_id("init"))] = init_value.as_const();
                             uhdm_trace("UHDM: Set init attribute for variable '%s' to %s\n",
                                 var_name.c_str(), init_value.as_const().as_string().c_str());
                             // Also create a sync-always process so the wire has a constant
@@ -7054,14 +7056,14 @@ void UhdmImporter::import_module(const module_inst* uhdm_module) {
                     // stray wire that then latches).
                     for (int i = array_low; i < array_low + array_size; i++) {
                         std::string element_name = array_name + "[" + std::to_string(i) + "]";
-                        RTLIL::IdString wire_id = RTLIL::escape_id(element_name);
+                        RTLIL::IdString wire_id = uid(RTLIL::escape_id(element_name));
                         if (!module->wire(wire_id)) {
                             RTLIL::Wire* wire = module->addWire(wire_id, element_width);
                             if (element_signed)
                                 wire->is_signed = true;
                             add_src_attribute(wire->attributes, array);
                             name_map[element_name] = wire;
-                            uhdm_trace("UHDM: Created wire '%s' (width=%d, signed=%d) for array element\n", wire->name.c_str(), element_width, element_signed);
+                            uhdm_trace("UHDM: Created wire '%s' (width=%d, signed=%d) for array element\n", wire->name.str().c_str(), element_width, element_signed);
                         }
                     }
                 }
@@ -7119,14 +7121,14 @@ void UhdmImporter::import_module(const module_inst* uhdm_module) {
 
                     for (int i = 0; i < array_size; i++) {
                         std::string element_name = array_name + "[" + std::to_string(array_low + i) + "]";
-                        RTLIL::IdString wire_id = RTLIL::escape_id(element_name);
+                        RTLIL::IdString wire_id = uid(RTLIL::escape_id(element_name));
                         if (!module->wire(wire_id)) {
                             RTLIL::Wire* wire = module->addWire(wire_id, element_width);
                             if (element_signed) wire->is_signed = true;
                             add_src_attribute(wire->attributes, array);
                             name_map[element_name] = wire;
                             uhdm_trace("UHDM: Created wire '%s' (width=%d) for unpacked-array element\n",
-                                wire->name.c_str(), element_width);
+                                wire->name.str().c_str(), element_width);
                         }
                     }
                 } else {
@@ -7186,7 +7188,7 @@ void UhdmImporter::import_module(const module_inst* uhdm_module) {
                         "wire (size=%d, elem_w=%d, total=%d) + per-element slices\n",
                         array_name.c_str(), array_size, element_width, total_width);
 
-                    RTLIL::IdString flat_id = RTLIL::escape_id(array_name);
+                    RTLIL::IdString flat_id = uid(RTLIL::escape_id(array_name));
                     RTLIL::Wire* flat_wire = module->wire(flat_id);
                     if (!flat_wire) {
                         flat_wire = module->addWire(flat_id, total_width);
@@ -7208,18 +7210,18 @@ void UhdmImporter::import_module(const module_inst* uhdm_module) {
                             if (l1.is_fully_const() && r1s.is_fully_const()) {
                                 il = l1.as_int(); ir = r1s.as_int();
                                 int base_elem_w = element_width / inner_count;
-                                flat_wire->attributes[RTLIL::escape_id("unpacked_elem_width")] = RTLIL::Const(base_elem_w);
-                                flat_wire->attributes[RTLIL::escape_id("unpacked_outer_low")]  = RTLIL::Const(array_low);
-                                flat_wire->attributes[RTLIL::escape_id("unpacked_outer_size")] = RTLIL::Const(array_size);
-                                flat_wire->attributes[RTLIL::escape_id("unpacked_inner_low")]  = RTLIL::Const(std::min(il, ir));
-                                flat_wire->attributes[RTLIL::escape_id("unpacked_inner_size")] = RTLIL::Const(inner_count);
+                                flat_wire->attributes[uid(RTLIL::escape_id("unpacked_elem_width"))] = RTLIL::Const(base_elem_w);
+                                flat_wire->attributes[uid(RTLIL::escape_id("unpacked_outer_low"))]  = RTLIL::Const(array_low);
+                                flat_wire->attributes[uid(RTLIL::escape_id("unpacked_outer_size"))] = RTLIL::Const(array_size);
+                                flat_wire->attributes[uid(RTLIL::escape_id("unpacked_inner_low"))]  = RTLIL::Const(std::min(il, ir));
+                                flat_wire->attributes[uid(RTLIL::escape_id("unpacked_inner_size"))] = RTLIL::Const(inner_count);
                             }
                         }
                     }
                     for (int i = 0; i < array_size; i++) {
                         std::string ename =
                             array_name + "[" + std::to_string(array_low + i) + "]";
-                        RTLIL::IdString eid = RTLIL::escape_id(ename);
+                        RTLIL::IdString eid = uid(RTLIL::escape_id(ename));
                         if (!module->wire(eid)) {
                             RTLIL::Wire* ew = module->addWire(eid, element_width);
                             if (element_signed) ew->is_signed = true;
@@ -7261,7 +7263,7 @@ void UhdmImporter::import_module(const module_inst* uhdm_module) {
             if (!lhs || lhs->UhdmType() != uhdmref_obj) continue;
             std::string lname = std::string(any_cast<const ref_obj*>(lhs)->VpiName());
             if (lname.empty() || name_map.count(lname) ||
-                module->count_id(RTLIL::escape_id(lname)))
+                module->count_id(uid(RTLIL::escape_id(lname))))
                 continue;
             int w = get_width(lhs, uhdm_module);
             if (w <= 0) w = 1;
@@ -7312,7 +7314,7 @@ void UhdmImporter::import_module(const module_inst* uhdm_module) {
                                 }
                                 
                                 if (init_value.is_fully_const()) {
-                                    wire->attributes[RTLIL::escape_id("init")] = init_value.as_const();
+                                    wire->attributes[uid(RTLIL::escape_id("init"))] = init_value.as_const();
                                     uhdm_trace("UHDM: Set init attribute for enum variable '%s' to %s\n", 
                                         var_name.c_str(), init_value.as_const().as_string().c_str());
                                 } else {
@@ -7575,7 +7577,7 @@ void UhdmImporter::import_module(const module_inst* uhdm_module) {
             size_t dot = n.rfind('.');
             if (dot != std::string::npos) hit = src_lhs_names.count(n.substr(dot + 1)) > 0;
         }
-        if (hit) w->attributes[RTLIL::escape_id("uhdm_src_lhs")] = RTLIL::Const(1);
+        if (hit) w->attributes[uid(RTLIL::escape_id("uhdm_src_lhs"))] = RTLIL::Const(1);
     }
 
     // A 2-STATE variable (`bit`, `byte`, `shortint`, `int`, `longint`) that
@@ -7701,7 +7703,7 @@ void UhdmImporter::import_module(const module_inst* uhdm_module) {
             if (w && other_driven_wires.count(w)) {
                 if (mode_debug)
                     log("  Removing init-only STa process for '%s' (also driven by another process)\n",
-                        w->name.c_str());
+                        w->name.str().c_str());
                 to_remove.push_back(kv.first);
             }
         }
@@ -7717,17 +7719,17 @@ void UhdmImporter::import_module(const module_inst* uhdm_module) {
     
     // Add dynports attribute if module has parameters and ports
     if (!module->avail_parameters.empty() && !module->ports.empty()) {
-        module->attributes[RTLIL::escape_id("dynports")] = RTLIL::Const(1);
+        module->attributes[uid(RTLIL::escape_id("dynports"))] = RTLIL::Const(1);
     }
     
     // Add hdlname attribute if this is a parameterized module
     if (modname.find("$paramod\\") == 0) {
-        module->attributes[RTLIL::escape_id("hdlname")] = RTLIL::Const(base_modname);
+        module->attributes[uid(RTLIL::escape_id("hdlname"))] = RTLIL::Const(base_modname);
     }
     
     // Add interfaces_replaced_in_module attribute if module has interface ports
     if (module_has_interface_ports(uhdm_module)) {
-        module->attributes[RTLIL::escape_id("interfaces_replaced_in_module")] = RTLIL::Const(1);
+        module->attributes[uid(RTLIL::escape_id("interfaces_replaced_in_module"))] = RTLIL::Const(1);
     }
     
     // NOTE: Blackbox detection is done later after all instances are created
@@ -7750,7 +7752,7 @@ void UhdmImporter::import_module(const module_inst* uhdm_module) {
             bool is_set = aval.empty() ||
                           aval.find(":1") != std::string::npos ||
                           aval == "1";
-            module->attributes[RTLIL::escape_id(aname)] =
+            module->attributes[uid(RTLIL::escape_id(aname))] =
                 import_attribute_value(attr);
             if (aname == "blackbox" && is_set) is_blackbox = true;
         }
@@ -7859,8 +7861,8 @@ void UhdmImporter::import_module(const module_inst* uhdm_module) {
 // only place read_slang or a Verilator testbench can observe the order.
 void UhdmImporter::reverse_unpacked_array_ports() {
     if (!module) return;
-    const RTLIL::IdString A_CNT = RTLIL::escape_id("unpacked_count");
-    const RTLIL::IdString A_EW = RTLIL::escape_id("unpacked_elem_width");
+    const RTLIL::IdString A_CNT = uid(RTLIL::escape_id("unpacked_count"));
+    const RTLIL::IdString A_EW = uid(RTLIL::escape_id("unpacked_elem_width"));
     std::vector<RTLIL::Wire*> targets;
     for (auto w : module->wires())
         if (w->attributes.count(A_CNT) && w->attributes.count(A_EW))
@@ -7872,7 +7874,7 @@ void UhdmImporter::reverse_unpacked_array_ports() {
         iw->attributes.erase(A_EW);
         // Per-dim (size, ascending) when the port has several unpacked dims.
         std::vector<std::pair<int,bool>> geom;
-        const RTLIL::IdString A_GEOM = RTLIL::escape_id("unpacked_dim_geom");
+        const RTLIL::IdString A_GEOM = uid(RTLIL::escape_id("unpacked_dim_geom"));
         if (iw->attributes.count(A_GEOM)) {
             std::string g = iw->attributes.at(A_GEOM).decode_string();
             iw->attributes.erase(A_GEOM);
@@ -7895,7 +7897,7 @@ void UhdmImporter::reverse_unpacked_array_ports() {
         RTLIL::IdString pub = iw->name;
         // Take the body's wire out of the port list under a private name and
         // give the module a fresh public port wire of the same width.
-        module->rename(iw, RTLIL::IdString("$unpacked" + pub.str()));
+        module->rename(iw, uid("$unpacked" + ustr(pub)));
         iw->port_input = iw->port_output = false;
         iw->port_id = 0;
         RTLIL::Wire* pw = module->addWire(pub, iw->width);
@@ -7931,7 +7933,7 @@ void UhdmImporter::reverse_unpacked_array_ports() {
         else
             module->connect(RTLIL::SigSpec(pw), rev);
         uhdm_trace("UHDM: Port '%s' unpacked array: public face reversed to element 0 "
-            "at the MSB (%d x %d bits)\n", pub.c_str(), cnt, ew);
+            "at the MSB (%d x %d bits)\n", ustr(pub).c_str(), cnt, ew);
     }
 }
 
@@ -7943,7 +7945,7 @@ std::string UhdmImporter::create_parameterized_module(const std::string& base_na
     // Build parameter string like Yosys does
     std::string param_string = "";
     for (const auto& [param_name, param_value] : base_module->parameter_default_values) {
-        param_string += "\\" + param_name.str().substr(1) + "="; // Remove leading backslash
+        param_string += "\\" + ustr(param_name).substr(1) + "="; // Remove leading backslash
         
         // Format parameter value (signed 32-bit representation like Yosys)
         if (param_value.flags & RTLIL::CONST_FLAG_SIGNED) {
@@ -7973,7 +7975,7 @@ std::string UhdmImporter::create_parameterized_module(const std::string& base_na
     }
     
     // Create the parameterized module if it doesn't exist
-    RTLIL::IdString param_module_id = RTLIL::escape_id(param_module_name);
+    RTLIL::IdString param_module_id = uid(RTLIL::escape_id(param_module_name));
     if (!design->module(param_module_id)) {
         if (mode_debug)
             uhdm_trace("    Creating new parameterized module: %s\n", param_module_name.c_str());
@@ -8008,8 +8010,8 @@ std::string UhdmImporter::create_parameterized_module(const std::string& base_na
         
         // Copy attributes
         param_module->attributes = base_module->attributes;
-        param_module->attributes[RTLIL::escape_id("hdlname")] = RTLIL::Const(base_name);
-        param_module->attributes[RTLIL::escape_id("dynports")] = RTLIL::Const(1);
+        param_module->attributes[uid(RTLIL::escape_id("hdlname"))] = RTLIL::Const(base_name);
+        param_module->attributes[uid(RTLIL::escape_id("dynports"))] = RTLIL::Const(1);
         
         param_module->fixup_ports();
     }
@@ -8186,7 +8188,7 @@ void UhdmImporter::tie_unassigned_two_state_to_zero(const UHDM::module_inst* uhd
             base = base.substr(0, br);
         if (!two_state.count(base)) continue;
         if (w->port_input) continue;
-        if (w->attributes.count(RTLIL::escape_id("uhdm_src_lhs"))) continue;
+        if (w->attributes.count(uid(RTLIL::escape_id("uhdm_src_lhs")))) continue;
         two_state_tie_candidates_.push_back({module->name, w->name});
     }
 }
@@ -8215,7 +8217,7 @@ void UhdmImporter::finalize_two_state_ties()
         driven_wires_cache_.erase(mod);
         if (mode_debug)
             uhdm_trace("UHDM: 2-state %s.%s is never assigned: tied to its initial value 0\n",
-                mod->name.c_str(), w->name.c_str());
+                mod->name.str().c_str(), w->name.str().c_str());
     }
     two_state_tie_candidates_.clear();
 }
@@ -8232,18 +8234,18 @@ void UhdmImporter::expand_interfaces() {
     
     // Identify interface modules and cells
     for (auto module : design->modules()) {
-        if (module->attributes.count(RTLIL::escape_id("is_interface"))) {
+        if (module->attributes.count(uid(RTLIL::escape_id("is_interface")))) {
             interface_modules.insert(module);
-            uhdm_trace("UHDM: Found interface module: %s\n", module->name.c_str());
+            uhdm_trace("UHDM: Found interface module: %s\n", module->name.str().c_str());
         }
         
         // Find interface cells in this module
         for (auto cell : module->cells()) {
             RTLIL::Module* cell_module = design->module(cell->type);
-            if (cell_module && cell_module->attributes.count(RTLIL::escape_id("is_interface"))) {
+            if (cell_module && cell_module->attributes.count(uid(RTLIL::escape_id("is_interface")))) {
                 interface_cells_to_remove.push_back(std::make_pair(module, cell));
                 uhdm_trace("UHDM: Found interface cell %s of type %s in module %s\n", 
-                    cell->name.c_str(), cell->type.c_str(), module->name.c_str());
+                    cell->name.str().c_str(), cell->type.str().c_str(), module->name.str().c_str());
                 
                 // Map dummy wires to interface names
                 std::string interface_name = cell->name.str();
@@ -8256,7 +8258,7 @@ void UhdmImporter::expand_interfaces() {
                     if (wire->name.str().find("$dummywireforinterface\\" + interface_name) == 0) {
                         dummy_wire_to_interface[wire->name] = interface_name;
                         uhdm_trace("UHDM: Mapped dummy wire %s to interface %s\n", 
-                            wire->name.c_str(), interface_name.c_str());
+                            wire->name.str().c_str(), interface_name.c_str());
                     }
                 }
             }
@@ -8270,7 +8272,7 @@ void UhdmImporter::expand_interfaces() {
             continue;
         }
         
-        uhdm_trace("UHDM: Processing module %s for interface expansion\n", module->name.c_str());
+        uhdm_trace("UHDM: Processing module %s for interface expansion\n", module->name.str().c_str());
         
         // Find cells with interface ports
         std::vector<RTLIL::Cell*> cells_to_update;
@@ -8282,7 +8284,7 @@ void UhdmImporter::expand_interfaces() {
             RTLIL::Module* cell_module = design->module(cell->type);
             if (cell_module) {
                 for (auto wire : cell_module->wires()) {
-                    if (wire->attributes.count(RTLIL::escape_id("is_interface")) && wire->port_id > 0) {
+                    if (wire->attributes.count(uid(RTLIL::escape_id("is_interface"))) && wire->port_id > 0) {
                         has_interface_port = true;
                         break;
                     }
@@ -8292,7 +8294,7 @@ void UhdmImporter::expand_interfaces() {
             if (has_interface_port) {
                 cells_to_update.push_back(cell);
                 uhdm_trace("UHDM: Cell %s has interface ports (module %s has interface ports)\n", 
-                    cell->name.c_str(), cell->type.c_str());
+                    cell->name.str().c_str(), cell->type.str().c_str());
             }
         }
         
@@ -8309,7 +8311,7 @@ void UhdmImporter::expand_interfaces() {
                     if (wire_name.find("\\bus.") == 0) {
                         cell_interface_signals.insert(wire_name);
                         uhdm_trace("UHDM: Cell module %s has interface signal %s\n", 
-                            cell->type.c_str(), wire_name.c_str());
+                            cell->type.str().c_str(), wire_name.c_str());
                     }
                 }
             }
@@ -8324,9 +8326,9 @@ void UhdmImporter::expand_interfaces() {
                     port_wire = port_sig.as_wire();
                 }
                 
-                if (port_wire && port_wire->attributes.count(RTLIL::escape_id("is_interface"))) {
+                if (port_wire && port_wire->attributes.count(uid(RTLIL::escape_id("is_interface")))) {
                     uhdm_trace("UHDM: Expanding interface port %s on cell %s\n", 
-                        port_name.c_str(), cell->name.c_str());
+                        ustr(port_name).c_str(), cell->name.str().c_str());
                     
                     // Find which interface this dummy wire corresponds to
                     std::string interface_name;
@@ -8390,7 +8392,7 @@ void UhdmImporter::expand_interfaces() {
                             // Get the interface module to find its signals
                             RTLIL::Module* interface_module = design->module(interface_cell->type);
                             if (interface_module) {
-                                uhdm_trace("UHDM: Interface module %s has the following signals:\n", interface_module->name.c_str());
+                                uhdm_trace("UHDM: Interface module %s has the following signals:\n", interface_module->name.str().c_str());
                                 
                                 // Get all signals from the interface module
                                 for (auto iface_wire : interface_module->wires()) {
@@ -8405,15 +8407,15 @@ void UhdmImporter::expand_interfaces() {
                                     
                                     if (parent_wire) {
                                         // Create connection to the expanded signal
-                                        RTLIL::IdString expanded_port = RTLIL::escape_id(port_name.str() + "." + signal_name);
+                                        RTLIL::IdString expanded_port = uid(RTLIL::escape_id(ustr(port_name) + "." + signal_name));
                                         new_connections[expanded_port] = parent_wire;
-                                        uhdm_trace("UHDM: Connected port %s to wire %s\n", expanded_port.c_str(), parent_wire->name.c_str());
+                                        uhdm_trace("UHDM: Connected port %s to wire %s\n", ustr(expanded_port).c_str(), parent_wire->name.str().c_str());
                                     } else {
                                         log_warning("UHDM: Could not find wire %s in parent module\n", expanded_wire_name.c_str());
                                     }
                                 }
                             } else {
-                                log_warning("UHDM: Could not find interface module %s\n", interface_cell->type.c_str());
+                                log_warning("UHDM: Could not find interface module %s\n", interface_cell->type.str().c_str());
                             }
                         } else {
                             // Couldn't find an interface_cell in
@@ -8437,7 +8439,7 @@ void UhdmImporter::expand_interfaces() {
                                     if (auto pw = module->wire(RTLIL::escape_id(parent_name))) {
                                         new_connections[cw->name] = RTLIL::SigSpec(pw);
                                         uhdm_trace("UHDM: (fallback) connected %s to wire %s\n",
-                                            cw->name.c_str(), pw->name.c_str());
+                                            cw->name.str().c_str(), pw->name.str().c_str());
                                     }
                                 }
                             }
@@ -8445,7 +8447,7 @@ void UhdmImporter::expand_interfaces() {
                                 log_warning("UHDM: Could not find interface cell for %s\n", interface_name.c_str());
                         }
                     } else {
-                        log_warning("UHDM: Could not find interface instance for wire %s\n", port_wire->name.c_str());
+                        log_warning("UHDM: Could not find interface instance for wire %s\n", port_wire->name.str().c_str());
                     }
                 } else {
                     // Keep non-interface connections as-is
@@ -8466,13 +8468,13 @@ void UhdmImporter::expand_interfaces() {
         RTLIL::Module* module = pair.first;
         RTLIL::Cell* cell = pair.second;
         uhdm_trace("UHDM: Removing interface cell %s from module %s\n", 
-            cell->name.c_str(), module->name.c_str());
+            cell->name.str().c_str(), module->name.str().c_str());
         module->remove(cell);
     }
     
     // Remove interface modules
     for (auto iface_module : interface_modules) {
-        uhdm_trace("UHDM: Removing interface module %s\n", iface_module->name.c_str());
+        uhdm_trace("UHDM: Removing interface module %s\n", iface_module->name.str().c_str());
         design->remove(iface_module);
     }
     
@@ -8486,7 +8488,7 @@ void UhdmImporter::expand_interfaces() {
         }
         if (!wires_to_remove.empty()) {
             for (auto wire : wires_to_remove) {
-                uhdm_trace("UHDM: Removing dummy interface wire %s\n", wire->name.c_str());
+                uhdm_trace("UHDM: Removing dummy interface wire %s\n", wire->name.str().c_str());
             }
             module->remove(wires_to_remove);
         }
@@ -8502,9 +8504,9 @@ void UhdmImporter::expand_interfaces() {
         // Check if this module has interface ports (wires with is_interface attribute)
         std::vector<RTLIL::Wire*> interface_port_wires;
         for (auto wire : module->wires()) {
-            if (wire->attributes.count(RTLIL::escape_id("is_interface")) && wire->port_id > 0) {
+            if (wire->attributes.count(uid(RTLIL::escape_id("is_interface"))) && wire->port_id > 0) {
                 interface_port_wires.push_back(wire);
-                uhdm_trace("UHDM: Module %s has interface port %s\n", module->name.c_str(), wire->name.c_str());
+                uhdm_trace("UHDM: Module %s has interface port %s\n", module->name.str().c_str(), wire->name.str().c_str());
             }
         }
         
@@ -8552,9 +8554,9 @@ void UhdmImporter::expand_interfaces() {
                     // port's direction (which is typically `inout`).
                     int dir = 0;
                     auto dir_id = RTLIL::escape_id("modport_direction");
-                    if (signal_wire->attributes.count(dir_id)) {
-                        dir = signal_wire->attributes.at(dir_id).as_int();
-                        signal_wire->attributes.erase(dir_id);
+                    if (signal_wire->attributes.count(uid(dir_id))) {
+                        dir = signal_wire->attributes.at(uid(dir_id)).as_int();
+                        signal_wire->attributes.erase(uid(dir_id));
                     } else {
                         // Array element `<port>[i].<field>`: the modport direction
                         // wasn't stamped on the wire (it's created by the
@@ -8620,7 +8622,7 @@ void UhdmImporter::expand_interfaces() {
                     }
                     signal_wire->port_id = ++max_port_id;
                     uhdm_trace("UHDM: Converted %s to port (id=%d, in=%d, out=%d)\n",
-                        signal_wire->name.c_str(), signal_wire->port_id,
+                        signal_wire->name.str().c_str(), signal_wire->port_id,
                         signal_wire->port_input, signal_wire->port_output);
                 }
                 
@@ -8628,7 +8630,7 @@ void UhdmImporter::expand_interfaces() {
                 interface_wire->port_input = false;
                 interface_wire->port_output = false;
                 interface_wire->port_id = 0;
-                uhdm_trace("UHDM: Removed interface port status from %s\n", interface_wire->name.c_str());
+                uhdm_trace("UHDM: Removed interface port status from %s\n", interface_wire->name.str().c_str());
             }
             
             // Remove interface port wires
