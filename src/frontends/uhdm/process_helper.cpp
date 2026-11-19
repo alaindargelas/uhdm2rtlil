@@ -424,6 +424,14 @@ std::string UhdmImporter::expanded_array_base(const std::string& name) {
 
 int UhdmImporter::const_cond_value(const any* cond) {
     if (!cond) return -1;
+    // A constant REAL guard is true when NONZERO (`localparam real Q = 0.25;
+    // if (Q)`); read through parse_vpi_value_to_int below it rounds to 0 and
+    // the live arm was folded away as dead (tests/simple/real_cond.v).
+    {
+        double rv = 0.0;
+        bool saw_real = false;
+        if (try_eval_real(cond, rv, saw_real) && saw_real) return rv != 0.0 ? 1 : 0;
+    }
     // Constant literal (`if (1'b0)`).
     if (cond->VpiType() == vpiConstant) {
         RTLIL::SigSpec s = import_constant(any_cast<const constant*>(cond));

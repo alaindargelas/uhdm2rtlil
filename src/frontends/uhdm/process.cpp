@@ -1760,7 +1760,7 @@ void UhdmImporter::ff_simple_eval(const UHDM::any* stmt,
                 cond_e = s->VpiCondition(); then_s = s->VpiStmt();
                 else_s = s->VpiElseStmt();
             }
-            RTLIL::SigSpec cond = import_expression(cond_e, &blk);
+            RTLIL::SigSpec cond = import_condition(cond_e, &blk);
             if (cond.size() > 1) cond = module->ReduceBool(NEW_ID, cond);
 
             auto blk0 = blk, nb0 = nb;
@@ -2719,7 +2719,7 @@ void UhdmImporter::import_always_ff(const process_stmt* uhdm_process, RTLIL::Pro
 
                         // Import the condition (!rst_n)
                         if (auto cond = if_else_stmt->VpiCondition()) {
-                            RTLIL::SigSpec cond_sig = import_expression(cond);
+                            RTLIL::SigSpec cond_sig = import_condition(cond);
                             
                             // Create switch on the condition
                             RTLIL::CaseRule* sw = new RTLIL::CaseRule;
@@ -3282,14 +3282,14 @@ void UhdmImporter::import_always_ff(const process_stmt* uhdm_process, RTLIL::Pro
                 if (simple_if_stmt->VpiType() == vpiIfElse) {
                     const if_else* if_else_stmt = any_cast<const if_else*>(simple_if_stmt);
                     if (auto condition_expr = if_else_stmt->VpiCondition()) {
-                        condition = import_expression(condition_expr);
+                        condition = import_condition(condition_expr);
                     }
                     then_stmt = if_else_stmt->VpiStmt();
                     else_stmt = if_else_stmt->VpiElseStmt();
                 } else if (simple_if_stmt->VpiType() == vpiIf) {
                     const UHDM::if_stmt* if_stmt = any_cast<const UHDM::if_stmt*>(simple_if_stmt);
                     if (auto condition_expr = if_stmt->VpiCondition()) {
-                        condition = import_expression(condition_expr);
+                        condition = import_condition(condition_expr);
                     }
                     then_stmt = if_stmt->VpiStmt();
                     else_stmt = nullptr;
@@ -7713,9 +7713,9 @@ void UhdmImporter::import_statement_with_loop_vars(const any* uhdm_stmt, RTLIL::
             // Import condition
             RTLIL::SigSpec cond;
             if (if_st) {
-                cond = import_expression(any_cast<const expr*>(if_st->VpiCondition()));
+                cond = import_condition(if_st->VpiCondition());
             } else if (if_el) {
-                cond = import_expression(any_cast<const expr*>(if_el->VpiCondition()));
+                cond = import_condition(if_el->VpiCondition());
             }
             
             // Save current condition
@@ -7854,7 +7854,7 @@ void UhdmImporter::import_statement_sync(const any* uhdm_stmt, RTLIL::SyncRule* 
                 // Get condition
                 RTLIL::SigSpec condition;
                 if (auto condition_expr = if_else_stmt->VpiCondition()) {
-                    condition = import_expression(condition_expr);
+                    condition = import_condition(condition_expr);
                     // Reduce multi-bit conditions to 1 bit (mux select must be 1 bit)
                     if (condition.size() > 1) {
                         condition = module->ReduceBool(NEW_ID, condition);
@@ -14200,7 +14200,7 @@ void UhdmImporter::inline_func_body_comb(const any* stmt, RTLIL::Process* proc,
                 auto ie = any_cast<const UHDM::if_else*>(stmt);
                 if (ie) { cond_expr = ie->VpiCondition(); then_stmt = ie->VpiStmt(); else_stmt = ie->VpiElseStmt(); }
             }
-            RTLIL::SigSpec cond = import_expression(cond_expr, &func_mapping);
+            RTLIL::SigSpec cond = import_condition(cond_expr, &func_mapping);
             if (cond.size() > 1)
                 cond = module->ReduceBool(NEW_ID, cond);
             // Constant condition: take the live branch directly (no mux), which
@@ -20515,7 +20515,7 @@ void UhdmImporter::import_if_stmt_sync(const UHDM::if_stmt* uhdm_if, RTLIL::Sync
     // Get the condition
     RTLIL::SigSpec condition;
     if (auto condition_expr = uhdm_if->VpiCondition()) {
-        condition = import_expression(condition_expr);
+        condition = import_condition(condition_expr);
 
         // Reduce multi-bit conditions to 1 bit (mux select must be 1 bit).
         // A CONSTANT multi-bit condition must reduce to a constant bit, not a
@@ -21258,7 +21258,7 @@ void UhdmImporter::import_if_else_comb(const UHDM::if_else* uhdm_if_else, RTLIL:
         // so a condition like cam's `!found_match` observes the accumulator
         // updated by earlier statements / loop iterations, not the registered
         // output wire (which would be a combinational feedback loop).
-        RTLIL::SigSpec condition_sig = import_expression(
+        RTLIL::SigSpec condition_sig = import_condition(
             condition, current_comb_process ? &current_comb_values : nullptr);
 
         // Reduce multi-bit conditions to 1 bit for switch/compare matching.
@@ -21382,7 +21382,7 @@ void UhdmImporter::import_if_stmt_comb(const UHDM::if_stmt* uhdm_if, RTLIL::Proc
     if (auto condition = uhdm_if->VpiCondition()) {
         // See import_if_else_comb: blocking scalars resolve to their in-flight
         // value so a condition observes earlier same-block updates.
-        RTLIL::SigSpec condition_sig = import_expression(
+        RTLIL::SigSpec condition_sig = import_condition(
             condition, current_comb_process ? &current_comb_values : nullptr);
 
         // Reduce multi-bit conditions to 1 bit for switch/compare matching.
@@ -23560,7 +23560,7 @@ void UhdmImporter::import_statement_comb(const any* uhdm_stmt, RTLIL::CaseRule* 
                 // earlier same-branch writes (write-then-read); otherwise the
                 // condition reads the final wire net and forms a comb loop.
                 RTLIL::SigSpec condition_sig =
-                    import_expression(condition, comb_read_map());
+                    import_condition(condition, comb_read_map());
 
                 // Reduce multi-bit conditions to 1 bit for switch/compare matching.
                 // A CONSTANT multi-bit condition must reduce to a constant bit, not
@@ -23673,7 +23673,7 @@ void UhdmImporter::import_statement_comb(const any* uhdm_stmt, RTLIL::CaseRule* 
                 // earlier same-branch writes (write-then-read); otherwise it
                 // reads the final wire net and forms a comb loop.
                 RTLIL::SigSpec condition_sig =
-                    import_expression(condition, comb_read_map());
+                    import_condition(condition, comb_read_map());
 
                 // Reduce multi-bit conditions to 1 bit for switch/compare
                 // matching -- a CONSTANT one to a constant bit, so the fold
