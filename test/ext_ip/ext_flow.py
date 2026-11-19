@@ -725,7 +725,7 @@ def _uhdm_only_cosim(w, m, top, cycles, ties, mem):
         u = int(mm.group(1))
         a = f" ({cycles + 1} cycles, {act.group(1)} active)" if act else ""
         if "VERDICT RTL_INERT" in (out or ""):
-            return "— (RTL inert under Verilator: no oracle)"
+            return "— (RTL outputs never change: nothing compared)"
         return ("✅ PASS" + a) if u == 0 else f"❌ {u} div"
     if "no outputs to compare" in (out or "") or "no clocks found" in (out or ""):
         return "— (comb/no clk)"
@@ -1096,12 +1096,14 @@ sat -verify -prove-asserts -seq {seq} -set-init-zero miter
             if "VERDICT RTL_INERT" in (out4 or ""):
                 # The RTL side moved nothing (body under `ifndef VERILATOR`,
                 # hdl-util/hdmi serializer): no oracle, not a divergence.
-                row["cosim"] = "— (RTL inert under Verilator: no oracle)"
+                row["cosim"] = "— (RTL outputs never change: nothing compared)"
             else:
                 row["cosim"] = ("✅ PASS" + a) if u == 0 else (
                     f"⚠ shared div (uhdm={u}, slang={sl})" if sl > 0 else
                     f"❌ {u} div (slang n/a)" if sl < 0 else f"❌ {u} div (slang clean)")
             row["slang_cosim"] = ("— (netlist not lowerable here)" if sl < 0
+                                  else "— (RTL outputs never change: nothing compared)"
+                                  if "VERDICT RTL_INERT" in (out4 or "")
                                   else "✅ PASS" if sl == 0 else f"❌ {sl} div")
         elif "no outputs to compare" in (out4 or "") or "no clocks found" in (out4 or ""):
             row["cosim"] = "— (comb/no clk)"

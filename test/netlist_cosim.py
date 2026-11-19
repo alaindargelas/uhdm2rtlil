@@ -596,16 +596,19 @@ print(f"{tag_name} ACTIVITY {activity} cycles with an output change")
 n, mu = compare("uhdm")
 ms = compare("slang")[1] if "slang" in traces else -1
 print(f"{tag_name} ADJUDICATION {n} cycles: uhdm_vs_rtl={mu} slang_vs_rtl={ms}")
-if mu == 0:
-    verdict = "NO_DIVERGENCE"
-elif activity == 0:
-    # The RTL never moved an output while a netlist did: Verilator was handed
-    # a module with nothing in it.  hdl-util/hdmi's serializer keeps its whole
-    # body under `ifndef VERILATOR` (OSERDESE2 primitives or a vendor model), so
-    # under Verilator `tmds` is driven by nothing and reads 0 forever.  That is
-    # not a divergence of either frontend -- there is no oracle -- and it must
-    # not be scored as one.
+if activity == 0:
+    # The RTL never changed an output, so nothing was compared -- whether or
+    # not the netlists match it.  Checked FIRST: scored as NO_DIVERGENCE, 387
+    # sweep rows (2026-11-19) read `✅ PASS (301 cycles, 0 active)` exactly like
+    # a real pass.  Causes seen: a protocol the random stimulus never completes
+    # (common_cells cc_cdc_fifo_gray_clearable_src, one half of a CDC pair,
+    # waits for its partner's reset handshake and sits in its clear sequence),
+    # and a body Verilator never sees (hdl-util/hdmi's serializer is under
+    # `ifndef VERILATOR`, so `tmds` reads 0 forever while a netlist moves).
+    # Neither is a verdict on either frontend.
     verdict = "RTL_INERT"
+elif mu == 0:
+    verdict = "NO_DIVERGENCE"
 elif ms > 0:
     verdict = "SHARED_DIVERGENCE"
 else:

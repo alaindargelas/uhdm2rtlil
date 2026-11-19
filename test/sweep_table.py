@@ -26,6 +26,12 @@ def count(f):
         opt=c[hdr['opt check (undriven)']] if 'opt check (undriven)' in hdr else ''
         u=c[hdr['co-sim vs RTL']]
         n['rows']+=1
+        # A co-sim whose RTL never changed an output compared nothing: it is
+        # no pass on EITHER side (netlist_cosim.py now reports it as
+        # RTL_INERT; reports written before that still say `0 active`).
+        if re.search(r'PASS \(\d+ cycles, 0 active\)', u):
+            u = '— (RTL outputs never change: nothing compared)'
+            if s.startswith('✅'): s = '— (RTL outputs never change)'
         # A slang divergence is counted the way ours is.  A row where BOTH
         # netlists diverge from the RTL is a testbench artefact the miter
         # adjudicates (the uhdm column shows it as '⚠ shared div' or
