@@ -501,6 +501,7 @@ builds = {
 if have_slang:
     builds["slang"] = VFLAGS + ["--Mdir", "obj_slang", "-o", "sim_slang"] + [str(slang_nl), "tb.sv"]
 traces = {}
+guarded_stubbed = set()
 for tag, flags in builds.items():
     exe = WORK / f"obj_{tag}" / f"sim_{tag}"
     stamp = [slang_nl if tag == "slang" else nl, WORK / "tb.sv", WORK / "tb_rtl.sv"]
@@ -523,6 +524,39 @@ for tag, flags in builds.items():
             # as NumAlerts / BlockAw); Verilator refuses to override those —
             # drop them from the instantiation and rebuild.
             locals_ = set(re.findall(r"override '(\w+)'", r.stdout + r.stderr))
+            # A module compiled out by a preprocessor guard but still NAMED in
+            # an untaken generate branch: basejump_stl's bsg_clkgate_optional
+            # is `ifndef SYNTHESIS`, and bsg_mem_1r1w_sync instantiates it
+            # under `if (enable_clock_gating_p)`, false in every BlackParrot
+            # configuration.  Surelog and read_slang never elaborate the branch;
+            # Verilator resolves every module NAME first and fails with "Can't
+            # resolve module reference", so the row had no co-sim.  Supply the
+            # module's own text, extracted from the closure without its guard.
+            # It cannot run: the design elaborated without it.
+            missing = set(re.findall(r"Can't resolve module reference: '(\w+)'",
+                                     r.stdout + r.stderr)) - guarded_stubbed
+            if tag == "rtl" and r.returncode != 0 and missing:
+                found = {}
+                for f in srcs:
+                    try:
+                        t = open(f, errors="replace").read()
+                    except OSError:
+                        continue
+                    for name in missing - set(found):
+                        mm = re.search(rf"^\s*module\s+{name}\b.*?^\s*endmodule\b",
+                                       t, re.S | re.M)
+                        if mm:
+                            found[name] = mm.group(0)
+                if found:
+                    guarded_stubbed.update(found)
+                    gs = WORK / "guarded_modules.sv"
+                    prev_txt = gs.read_text() if gs.exists() else ""
+                    gs.write_text(prev_txt + "\n".join(found.values()) + "\n")
+                    if str(gs) not in flags:
+                        flags.insert(flags.index("tb_rtl.sv"), str(gs))
+                    print(f"{tag_name}: rtl build: supplied guarded-out module(s) "
+                          f"{', '.join(sorted(found))}")
+                    continue
             if tag != "rtl" or r.returncode == 0 or not locals_:
                 break
             args.param = [p for p in args.param if p.split("=", 1)[0] not in locals_]
