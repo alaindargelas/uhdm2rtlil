@@ -959,12 +959,13 @@ A sweep row that co-simulates clean with the `read_slang` netlist and diverges
 with ours is OUR defect; such rows are tracked in the sweeps and listed here in
 the same format as the classes above, with their status on `main` only.
 
-**Status on `main`: 3 row(s) open.**  32 row(s) ever listed here co-simulate clean
+**Status on `main`: 2 row(s) open.**  33 row(s) ever listed here co-simulate clean
 with the `read_uhdm` netlist on `main` and are not listed; the fixes that
 closed them, by row, are in `test/slang_uhdm_div_closed.txt`:
 
 | row | closed by |
 |---|---|
+| `black-parrot/bp_be_dcache` | #1633 (an operand bound to a signal folded by ExprEval to the parent's same-named genvar: bsg_decode inside wbuf_in[i]), 2026-11-20 |
 | `cheshire/apb_uart` | #1466 (Surelog #4248: `$bits(port.member)` over a type-parameter port), 2026-11-06 |
 | `cheshire/axi_rt_unit_top_synth` | #1464 (unbased unsized literal in a comparison), 2026-11-06 |
 | `cheshire/obi_uart_tx` | #1467 (comb `for` with a runtime bound: guarded writes recorded unconditionally), 2026-11-06 |
@@ -1002,11 +1003,10 @@ A row listed below is open: the latest sweep reports show it diverging with the
 `read_uhdm` netlist and it is not in the closed list.  A closed row that comes back
 is a regression, not a stale entry.
 
-**3** open row(s).
+**2** open row(s).
 
 | set | test | verdicts | recipe |
 |---|---|---|---|
-| sweep black-parrot | [`bp_be_dcache`](https://github.com/black-parrot/black-parrot/blob/710b0ea998c3b2f70ef9671d5619e439f13f826c/bp_be/src/v/bp_be_dcache/bp_be_dcache.sv#L77) | read_slang ✅ PASS; read_uhdm ❌ 106 div (slang clean) | R3 `python3 ext_flow.py black-parrot bp_be_dcache` |
 | sweep black-parrot | [`bp_be_pipe_mem`](https://github.com/black-parrot/black-parrot/blob/710b0ea998c3b2f70ef9671d5619e439f13f826c/bp_be/src/v/bp_be_calculator/bp_be_pipe_mem.sv#L16) | read_slang ✅ PASS; read_uhdm ❌ 10 div (slang clean) | R3 `python3 ext_flow.py black-parrot bp_be_pipe_mem` |
 | sweep black-parrot | [`bp_core_lite`](https://github.com/black-parrot/black-parrot/blob/710b0ea998c3b2f70ef9671d5619e439f13f826c/bp_top/src/v/bp_core_lite.sv#L13) | read_slang ✅ PASS; read_uhdm ❌ 212 div (slang clean) | R3 `python3 ext_flow.py black-parrot bp_core_lite` |
 
