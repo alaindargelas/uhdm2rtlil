@@ -10328,6 +10328,37 @@ RTLIL::SigSpec UhdmImporter::import_operation(const operation* uhdm_op, const UH
         has_gen_scope_param_operand = refs_gsp(uhdm_op);
     }
 
+    // A ref_obj BOUND to a NET or VARIABLE is a runtime signal, and ExprEval
+    // does not honour that binding: it resolves the NAME by walking up the
+    // parent chain for a parameter.  basejump's bsg_decode
+    // (`assign o = (num_out_p)'(1'b1 << i)`, `i` an input PORT) instantiated
+    // inside bp_be_dcache's `for (genvar i ...) begin : wbuf_in` found the
+    // PARENT's genvar past its own module instance, so every decoder folded
+    // to the constant `1 << genvar` -- 106 diverging co-sim cycles on
+    // bp_be_dcache, and bp_be_pipe_mem / bp_core_lite through it.  The only
+    // constant ExprEval can return for such an operand is a captured
+    // same-named parameter, so keep the operation out of the fold.
+    bool has_signal_bound_operand = false;
+    if (uhdm_op->Operands()) {
+        std::function<bool(const UHDM::any*)> refs_sig =
+            [&](const UHDM::any* e) -> bool {
+                if (!e) return false;
+                if (e->VpiType() == vpiRefObj) {
+                    const UHDM::any* ag = any_cast<const ref_obj*>(e)->Actual_group();
+                    return ag && (dynamic_cast<const UHDM::nets*>(ag) ||
+                                  dynamic_cast<const UHDM::variables*>(ag));
+                }
+                if (e->VpiType() == vpiOperation) {
+                    auto op2 = any_cast<const operation*>(e);
+                    if (op2->Operands())
+                        for (auto o2 : *op2->Operands())
+                            if (refs_sig(o2)) return true;
+                }
+                return false;
+            };
+        has_signal_bound_operand = refs_sig(uhdm_op);
+    }
+
     // An ENUM member whose VpiSize disagrees with its enum's base width
     // (lc_ctrl_state_pkg's `enum logic [vbits(NumLcStates)-1:0]` members
     // carry vpiSize 64, the evaluator's default for a function-sized base):
@@ -10451,6 +10482,7 @@ RTLIL::SigSpec UhdmImporter::import_operation(const operation* uhdm_op, const UH
     if (op_type != vpiCastOp && !has_unsized_fill_operand &&
         !has_struct_param_hier_operand && !has_loop_value_operand &&
         !has_param_replication_count && !has_gen_scope_param_operand &&
+        !has_signal_bound_operand &&
         !has_missized_enum_operand && !has_unpacked_array_concat_target &&
         !has_runtime_cond_arm && !has_unpacked_array_param_elem) {
         ExprEval eval;

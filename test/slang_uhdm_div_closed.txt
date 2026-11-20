@@ -37,3 +37,4 @@ sv-yosys-issues/issue_1400_warn_on_mixing_non_blocking_and # initial-block nonbl
 slang-issues/issue_1433_spurious_unresolved_hierarchical_path_error # absolute / generate-scoped XMR read resolved (was X), 2026-11-14
 openpiton/l2_state # #1626 (a reduction operand imported under the comparison's 32-bit context: the BIST init-done test never fired, every SRAM read was 0), 2026-11-19
 openpiton/l2_state_wrap # #1626 (same, through l2_state), 2026-11-19
+black-parrot/bp_be_dcache  # #1633 (an operand bound to a signal folded by ExprEval to the parent's same-named genvar: bsg_decode inside wbuf_in[i]), 2026-11-20
