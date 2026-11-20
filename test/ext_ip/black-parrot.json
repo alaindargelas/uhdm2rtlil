@@ -93,6 +93,12 @@
     "-DYOSYS"
   ],
   "_slang_flags_note": "-DYOSYS: basejump_stl's bsg_defines.sv expands BSG_VIVADO_SYNTH_FAILS under SYNTHESIS to the deliberate syntax error `this_module_is_not_synthesizeable_in_vivado` unless DC, CDS_TOOL_DEFINE, SURELOG or YOSYS is defined.  Surelog predefines SURELOG; read_slang predefines neither, so every row reaching bsg_mem_1rw_sync_mask_write_bit_synth.sv had no reference ('expected a declaration name').  That macro is the only YOSYS/SURELOG test in the closure, so both readers now take the same branch.",
-  "exclude": [],
-  "exclude_notes": {}
+  "exclude": [
+    "^bp_cacc_tile_node$"
+  ],
+  "exclude_notes": {
+    "^bp_cacc_tile_node$": "Surelog elaboration runs out of memory: it expands the coherence router's bsg_mux_one_hot generate blocks (cac_coh_socket.routers[*].router.out_ch[*].data_mux) past 28 GB resident and aborts with std::bad_alloc, before the UHDM is written.  Its resident memory tracks its address space, so no Surelog cap that the other whole-core rows can live with (20 GB) stops it before it exhausts a 16 GB runner."
+  },
+  "dump_limit_mb": 0,
+  "_dump_limit_mb_note": "No textual UHDM dump (-d uhdm): every whole-core closure here is 1-1.9 MB, under the 2 MB default, and the dump adds ~0.8 GB to Surelog's peak plus the whole text captured by the harness.  The binary surelog.uhdm is unaffected."
 }
