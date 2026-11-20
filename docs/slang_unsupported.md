@@ -14,7 +14,7 @@ downloaded nightly sweep reports; regenerate after a regression + sweep cycle.
 
 Inputs, with their vintages -- the two halves are NOT measured at the same time:
 the **test** rows (internal + yosys) come from `slang_coverage_1119.tsv` (2026-11-19), measured against the tree it
-was run on; the **sweep** rows come from 83 downloaded report(s) under `build/sweeps/_night1119` (2026-11-19), so they
+was run on; the **sweep** rows come from 83 downloaded report(s) under `build/sweeps/_night1120` (2026-11-20), so they
 are only as current as that download and do not reflect anything merged since.
 
 ## How to reproduce
@@ -42,7 +42,7 @@ All recipes run from a built tree (`make -j$(nproc)`), from `test/`.
 | sweep apb | 8 modules | 0 | 0 | 0 |
 | sweep axi | 108 modules | 12 | 5 | 7 |
 | sweep biriscv | 44 modules | 4 | 4 | 0 |
-| sweep black-parrot | 125 modules | 43 | 29 | 14 |
+| sweep black-parrot | 121 modules | 23 | 20 | 3 |
 | sweep boom | 422 modules | 23 | 0 | 23 |
 | sweep caliptra | 22 modules | 0 | 0 | 0 |
 | sweep caliptra-ss | 273 modules | 15 | 11 | 4 |
@@ -122,7 +122,7 @@ The yosys line counts every generated `run/` directory, 29 of which the regressi
 
 The sweep lines count rows of the nightly tables (modules slang could not read, or whose slang netlist failed co-sim); modules slang reads and matches are not listed per family here -- see the README's sweep table.
 
-**Against the co-simulation table in [benchmarking.md](benchmarking.md):** its `read_slang` *diverge* column is 191 rows over these sweeps = **24** where the slang netlist diverges and read_uhdm's tracks the RTL (the *bug* class below) + **130** where BOTH netlists diverge identically (a testbench artefact, in [incomplete_testcases.md](incomplete_testcases.md)) + **37** adjudicated NOT a slang defect (test/slang_cosim_adjudicated.txt).  The other direction -- read_slang clean, read_uhdm diverging -- is the last section of this file.
+**Against the co-simulation table in [benchmarking.md](benchmarking.md):** its `read_slang` *diverge* column is 192 rows over these sweeps = **25** where the slang netlist diverges and read_uhdm's tracks the RTL (the *bug* class below) + **130** where BOTH netlists diverge identically (a testbench artefact, in [incomplete_testcases.md](incomplete_testcases.md)) + **37** adjudicated NOT a slang defect (test/slang_cosim_adjudicated.txt).  The other direction -- read_slang clean, read_uhdm diverging -- is the last section of this file.
 
 ## Failure classes
 
@@ -135,26 +135,26 @@ The sweep lines count rows of the nightly tables (modules slang could not read, 
 | sim-only | net state read in design initialization | 10 | 1 | 0 |
 | sim-only | unsynthesizable feature (string, event, dynamic size) | 7 | 2 | 2 |
 | strict | type rule (packed dims on int type, port initializer, member access, argument count, ...) | 18 | 9 | 49 |
-| strict | syntax slang rejects (`expected ...`, macro, binary digit) | 11 | 13 | 36 |
+| strict | syntax slang rejects (`expected ...`, macro, binary digit) | 11 | 13 | 21 |
 | strict | name used before declaration / undeclared | 4 | 4 | 35 |
 | strict | out-of-range select or index | 4 | 6 | 20 |
 | strict | top-level interface port left unconnected | 12 | 2 | 8 |
 | strict | non-ANSI port declaration in an ANSI module | 0 | 12 | 2 |
 | strict | generate-block reference or generate function in a constant expression | 6 | 7 | 0 |
 | strict | assignment pattern leaves array elements uncovered / overrides a parameter that does not exist | 1 | 1 | 10 |
-| strict | `$fatal` / `$error` raised at elaboration -- the design refuses this configuration | 0 | 0 | 11 |
+| strict | `$fatal` / `$error` raised at elaboration -- the design refuses this configuration | 0 | 0 | 12 |
 | strict | implicit conversion needs a cast (enum / struct) | 8 | 0 | 2 |
 | strict | assignment to a net in a procedural block | 4 | 5 | 0 |
+| strict | elaboration at a degenerate parameter default (type parameter left `logic`, parameter without a value, packed type too wide) | 0 | 0 | 8 |
 | strict | redefinition / duplicate definition | 1 | 4 | 1 |
 | strict | hierarchical reference inside a constant function call (`$bits(inst.sig)`) | 0 | 0 | 6 |
-| strict | elaboration at a degenerate parameter default (type parameter left `logic`, parameter without a value, packed type too wide) | 0 | 0 | 4 |
 | synth-limit | `unsupported language feature` | 15 | 4 | 0 |
 | synth-limit | flip-flop with multiple / non-canonical asynchronous loads | 3 | 5 | 9 |
 | synth-limit | net declaration initializer / `$readmemh` (sv-elab) | 0 | 0 | 12 |
 | synth-limit | mixed blocking / non-blocking assignment to one variable | 0 | 1 | 8 |
 | synth-limit | loop unroll limit exhausted (`--unroll-limit`) | 2 | 0 | 1 |
 | synth-limit | read_slang did not finish within the sweep's time budget | 0 | 0 | 2 |
-| bug | netlist diverges from the RTL under Verilator (read_uhdm's does not) | 0 | 0 | 24 |
+| bug | netlist diverges from the RTL under Verilator (read_uhdm's does not) | 0 | 0 | 25 |
 | bug | internal frontend error / failed assert / abort / bad_alloc | 10 | 4 | 9 |
 | bug | `Feature unimplemented` | 8 | 1 | 8 |
 | bug | a declared parameter or type-parameter name rejected as `cannot be used in an expression` (a type-parameter override on an interface instance, a parameter as a case label; minimal repros pass, so the failure is context-dependent) | 0 | 0 | 10 |
@@ -339,12 +339,12 @@ LRM rules slang enforces and the other two frontends relax. The source is what a
 | internal test | [`struct_unpacked_array_member`](https://github.com/chipsalliance/uhdm2rtlil/tree/main/test/struct_unpacked_array_member) | dut.sv:9: ERROR: packed members must be of integral type (not 'bit[7:0]$[4]') | R1 `./slang_coverage_sweep.sh --one struct_unpacked_array_member` |
 | internal test | [`union4_repro`](https://github.com/chipsalliance/uhdm2rtlil/tree/main/test/union4_repro) | dut.sv:3: ERROR: all members of a packed union must have the same width; 'raw' has width of 32, previously seen width was 29 | R1 `./slang_coverage_sweep.sh --one union4_repro` |
 | internal test | [`various_struct_access`](https://github.com/chipsalliance/uhdm2rtlil/tree/main/test/various_struct_access) | dut.sv:24: ERROR: invalid member access for type 'logic[1:0]' | R1 `./slang_coverage_sweep.sh --one various_struct_access` |
-| sweep black-parrot | [`bp_be_ptw`](https://github.com/black-parrot/black-parrot/blob/710b0ea998c3b2f70ef9671d5619e439f13f826c/bp_be/src/v/bp_be_calculator/bp_be_ptw.sv#L5) | ERROR: 'bp_be_ptw' is not a valid top-level module | R3 `python3 ext_flow.py black-parrot bp_be_ptw` |
-| sweep black-parrot | [`bp_lce_req`](https://github.com/black-parrot/black-parrot/blob/710b0ea998c3b2f70ef9671d5619e439f13f826c/bp_me/src/v/lce/bp_lce_req.sv#L16) | ERROR: 'bp_lce_req' is not a valid top-level module | R3 `python3 ext_flow.py black-parrot bp_lce_req` |
+| sweep black-parrot | [`bp_bedrock_size_to_len`](https://github.com/black-parrot/black-parrot/blob/710b0ea998c3b2f70ef9671d5619e439f13f826c/bp_me/src/v/cce/bp_bedrock_size_to_len.sv#L22) | ERROR: 'bp_bedrock_size_to_len' is not a valid top-level module | R3 `python3 ext_flow.py black-parrot bp_bedrock_size_to_len` |
+| sweep black-parrot | [`bp_cce_alu`](https://github.com/black-parrot/black-parrot/blob/710b0ea998c3b2f70ef9671d5619e439f13f826c/bp_me/src/v/cce/bp_cce_alu.sv#L22) | ERROR: 'bp_cce_alu' is not a valid top-level module | R3 `python3 ext_flow.py black-parrot bp_cce_alu` |
+| sweep black-parrot | [`bp_lce_cmd`](https://github.com/black-parrot/black-parrot/blob/710b0ea998c3b2f70ef9671d5619e439f13f826c/bp_me/src/v/lce/bp_lce_cmd.sv#L15) | ERROR: 'bp_lce_cmd' is not a valid top-level module | R3 `python3 ext_flow.py black-parrot bp_lce_cmd` |
 | sweep black-parrot | [`bp_me_stream_pump_control`](https://github.com/black-parrot/black-parrot/blob/710b0ea998c3b2f70ef9671d5619e439f13f826c/bp_me/src/v/network/bp_me_stream_pump_control.sv#L22) | ERROR: 'bp_me_stream_pump_control' is not a valid top-level module | R3 `python3 ext_flow.py black-parrot bp_me_stream_pump_control` |
-| sweep black-parrot | [`bp_mmu`](https://github.com/black-parrot/black-parrot/blob/710b0ea998c3b2f70ef9671d5619e439f13f826c/bp_common/src/v/bp_mmu.sv#L7) | ERROR: 'bp_mmu' is not a valid top-level module | R3 `python3 ext_flow.py black-parrot bp_mmu` |
-| sweep black-parrot | [`bp_nd_socket`](https://github.com/black-parrot/black-parrot/blob/710b0ea998c3b2f70ef9671d5619e439f13f826c/bp_top/src/v/bp_nd_socket.sv#L11) | ERROR: 'bp_nd_socket' is not a valid top-level module | R3 `python3 ext_flow.py black-parrot bp_nd_socket` |
-| sweep black-parrot | [`bp_tlb`](https://github.com/black-parrot/black-parrot/blob/710b0ea998c3b2f70ef9671d5619e439f13f826c/bp_common/src/v/bp_tlb.sv#L10) | ERROR: 'bp_tlb' is not a valid top-level module | R3 `python3 ext_flow.py black-parrot bp_tlb` |
+| sweep black-parrot | [`bp_me_wormhole_stream_control`](https://github.com/black-parrot/black-parrot/blob/710b0ea998c3b2f70ef9671d5619e439f13f826c/bp_me/src/v/network/bp_me_wormhole_stream_control.sv#L29) | ERROR: 'bp_me_wormhole_stream_control' is not a valid top-level module | R3 `python3 ext_flow.py black-parrot bp_me_wormhole_stream_control` |
+| sweep black-parrot | [`bsg_rom_param`](https://github.com/black-parrot/black-parrot/blob/710b0ea998c3b2f70ef9671d5619e439f13f826c/bp_common/src/v/bsg_rom_param.sv#L4) | ERROR: 'bsg_rom_param' is not a valid top-level module | R3 `python3 ext_flow.py black-parrot bsg_rom_param` |
 | sweep caliptra-ss | [`counter_template`](https://github.com/chipsalliance/caliptra-ss/blob/dfa6c631dbfc00c8e0c7e6b256619d03d74f0bdc/third_party/i3c-core/src/libs/counter_template.sv#L7) | ERROR: unknown package 'i3c_ctrl_pkg' | R3 `python3 ext_flow.py caliptra-ss counter_template` |
 | sweep caliptra-ss | [`serializer`](https://github.com/chipsalliance/caliptra-ss/blob/dfa6c631dbfc00c8e0c7e6b256619d03d74f0bdc/third_party/i3c-core/src/libs/serializer.sv#L3) | ERROR: unknown package 'i3c_ctrl_pkg' | R3 `python3 ext_flow.py caliptra-ss serializer` |
 | sweep cheshire | [`apb_to_obi`](https://github.com/pulp-platform/cheshire/blob/a315a828abb61cf3cb9f4419b910ebe6739b90bf/.bender/git/checkouts/obi-7e44f4165b1b0649/src/apb_to_obi.sv#L11) | ERROR: no member named 'paddr' in 'apb_req_t' (aka 'axi_req_t') | R3 `python3 ext_flow.py cheshire apb_to_obi` |
@@ -398,7 +398,7 @@ LRM rules slang enforces and the other two frontends relax. The source is what a
 | yosys test | [`run/various/specify`](https://github.com/chipsalliance/uhdm2rtlil/tree/main/test/run/various/specify) | dut.v:41: ERROR: parallel specify path source type 'logic' has different width than destination type 'logic[1:0]' | R2 `./slang_coverage_sweep.sh --one run/various/specify` |
 | yosys test | [`run/various/struct_access`](https://github.com/chipsalliance/uhdm2rtlil/tree/main/test/run/various/struct_access) | dut.sv:24: ERROR: invalid member access for type 'logic[1:0]' | R2 `./slang_coverage_sweep.sh --one run/various/struct_access` |
 
-### syntax slang rejects (`expected ...`, macro, binary digit) -- 60
+### syntax slang rejects (`expected ...`, macro, binary digit) -- 45
 
 | set | test | diagnostic | recipe |
 |---|---|---|---|
@@ -413,27 +413,12 @@ LRM rules slang enforces and the other two frontends relax. The source is what a
 | internal test | [`svtypes_enum_simple`](https://github.com/chipsalliance/uhdm2rtlil/tree/main/test/svtypes_enum_simple) | dut.sv:9: ERROR: expected member | R1 `./slang_coverage_sweep.sh --one svtypes_enum_simple` |
 | internal test | [`various_port_sign_extend`](https://github.com/chipsalliance/uhdm2rtlil/tree/main/test/various_port_sign_extend) | dut.v:75: ERROR: expected identifier | R1 `./slang_coverage_sweep.sh --one various_port_sign_extend` |
 | internal test | [`yosys_issue_3657_async_reset_ternary_body`](https://github.com/chipsalliance/uhdm2rtlil/tree/main/test/yosys_issue_3657_async_reset_ternary_body) | dut.sv:13: ERROR: simple if-else pattern expected in modeling an asynchronous load on a flip-flop | R1 `./slang_coverage_sweep.sh --one yosys_issue_3657_async_reset_ternary_body` |
-| sweep black-parrot | [`bp_be_calculator_top`](https://github.com/black-parrot/black-parrot/blob/710b0ea998c3b2f70ef9671d5619e439f13f826c/bp_be/src/v/bp_be_calculator/bp_be_calculator_top.sv#L18) | ERROR: expected a declaration name | R3 `python3 ext_flow.py black-parrot bp_be_calculator_top` |
-| sweep black-parrot | [`bp_be_dcache`](https://github.com/black-parrot/black-parrot/blob/710b0ea998c3b2f70ef9671d5619e439f13f826c/bp_be/src/v/bp_be_dcache/bp_be_dcache.sv#L77) | ERROR: expected a declaration name | R3 `python3 ext_flow.py black-parrot bp_be_dcache` |
-| sweep black-parrot | [`bp_be_pipe_mem`](https://github.com/black-parrot/black-parrot/blob/710b0ea998c3b2f70ef9671d5619e439f13f826c/bp_be/src/v/bp_be_calculator/bp_be_pipe_mem.sv#L16) | ERROR: expected a declaration name | R3 `python3 ext_flow.py black-parrot bp_be_pipe_mem` |
-| sweep black-parrot | [`bp_be_top`](https://github.com/black-parrot/black-parrot/blob/710b0ea998c3b2f70ef9671d5619e439f13f826c/bp_be/src/v/bp_be_top.sv#L11) | ERROR: expected a declaration name | R3 `python3 ext_flow.py black-parrot bp_be_top` |
-| sweep black-parrot | [`bp_cacc_complex`](https://github.com/black-parrot/black-parrot/blob/710b0ea998c3b2f70ef9671d5619e439f13f826c/bp_top/src/v/bp_cacc_complex.sv#L6) | ERROR: expected a declaration name | R3 `python3 ext_flow.py black-parrot bp_cacc_complex` |
-| sweep black-parrot | [`bp_cacc_tile`](https://github.com/black-parrot/black-parrot/blob/710b0ea998c3b2f70ef9671d5619e439f13f826c/bp_top/src/v/bp_cacc_tile.sv#L9) | ERROR: expected a declaration name | R3 `python3 ext_flow.py black-parrot bp_cacc_tile` |
-| sweep black-parrot | [`bp_cce`](https://github.com/black-parrot/black-parrot/blob/710b0ea998c3b2f70ef9671d5619e439f13f826c/bp_me/src/v/cce/bp_cce.sv#L14) | ERROR: expected a declaration name | R3 `python3 ext_flow.py black-parrot bp_cce` |
 | sweep black-parrot | [`bp_cce_dir`](https://github.com/black-parrot/black-parrot/blob/710b0ea998c3b2f70ef9671d5619e439f13f826c/bp_me/src/v/cce/bp_cce_dir.sv#L18) | ERROR: expected a declaration name | R3 `python3 ext_flow.py black-parrot bp_cce_dir` |
-| sweep black-parrot | [`bp_cce_fsm`](https://github.com/black-parrot/black-parrot/blob/710b0ea998c3b2f70ef9671d5619e439f13f826c/bp_me/src/v/cce/bp_cce_fsm.sv#L24) | ERROR: expected a declaration name | R3 `python3 ext_flow.py black-parrot bp_cce_fsm` |
 | sweep black-parrot | [`bp_cce_wrapper`](https://github.com/black-parrot/black-parrot/blob/710b0ea998c3b2f70ef9671d5619e439f13f826c/bp_me/src/v/cce/bp_cce_wrapper.sv#L19) | ERROR: expected a declaration name | R3 `python3 ext_flow.py black-parrot bp_cce_wrapper` |
-| sweep black-parrot | [`bp_core_minimal`](https://github.com/black-parrot/black-parrot/blob/710b0ea998c3b2f70ef9671d5619e439f13f826c/bp_top/src/v/bp_core_minimal.sv#L11) | ERROR: expected a declaration name | R3 `python3 ext_flow.py black-parrot bp_core_minimal` |
-| sweep black-parrot | [`bp_fe_icache`](https://github.com/black-parrot/black-parrot/blob/710b0ea998c3b2f70ef9671d5619e439f13f826c/bp_fe/src/v/bp_fe_icache.sv#L34) | ERROR: expected a declaration name | R3 `python3 ext_flow.py black-parrot bp_fe_icache` |
-| sweep black-parrot | [`bp_fe_top`](https://github.com/black-parrot/black-parrot/blob/710b0ea998c3b2f70ef9671d5619e439f13f826c/bp_fe/src/v/bp_fe_top.sv#L8) | ERROR: expected a declaration name | R3 `python3 ext_flow.py black-parrot bp_fe_top` |
 | sweep black-parrot | [`bp_l2e_tile`](https://github.com/black-parrot/black-parrot/blob/710b0ea998c3b2f70ef9671d5619e439f13f826c/bp_top/src/v/bp_l2e_tile.sv#L14) | ERROR: expected a declaration name | R3 `python3 ext_flow.py black-parrot bp_l2e_tile` |
-| sweep black-parrot | [`bp_l2e_tile_node`](https://github.com/black-parrot/black-parrot/blob/710b0ea998c3b2f70ef9671d5619e439f13f826c/bp_top/src/v/bp_l2e_tile_node.sv#L6) | ERROR: expected a declaration name | R3 `python3 ext_flow.py black-parrot bp_l2e_tile_node` |
-| sweep black-parrot | [`bp_me_cache_controller`](https://github.com/black-parrot/black-parrot/blob/710b0ea998c3b2f70ef9671d5619e439f13f826c/bp_me/src/v/dev/bp_me_cache_controller.sv#L20) | ERROR: expected a declaration name | R3 `python3 ext_flow.py black-parrot bp_me_cache_controller` |
 | sweep black-parrot | [`bp_me_cache_slice`](https://github.com/black-parrot/black-parrot/blob/710b0ea998c3b2f70ef9671d5619e439f13f826c/bp_me/src/v/dev/bp_me_cache_slice.sv#L15) | ERROR: expected a declaration name | R3 `python3 ext_flow.py black-parrot bp_me_cache_slice` |
 | sweep black-parrot | [`bp_mem_complex`](https://github.com/black-parrot/black-parrot/blob/710b0ea998c3b2f70ef9671d5619e439f13f826c/bp_top/src/v/bp_mem_complex.sv#L6) | ERROR: expected a declaration name | R3 `python3 ext_flow.py black-parrot bp_mem_complex` |
-| sweep black-parrot | [`bp_sacc_complex`](https://github.com/black-parrot/black-parrot/blob/710b0ea998c3b2f70ef9671d5619e439f13f826c/bp_top/src/v/bp_sacc_complex.sv#L6) | ERROR: expected a declaration name | R3 `python3 ext_flow.py black-parrot bp_sacc_complex` |
 | sweep black-parrot | [`bp_sacc_tile`](https://github.com/black-parrot/black-parrot/blob/710b0ea998c3b2f70ef9671d5619e439f13f826c/bp_top/src/v/bp_sacc_tile.sv#L9) | ERROR: expected a declaration name | R3 `python3 ext_flow.py black-parrot bp_sacc_tile` |
-| sweep black-parrot | [`bp_sacc_tile_node`](https://github.com/black-parrot/black-parrot/blob/710b0ea998c3b2f70ef9671d5619e439f13f826c/bp_top/src/v/bp_sacc_tile_node.sv#L6) | ERROR: expected a declaration name | R3 `python3 ext_flow.py black-parrot bp_sacc_tile_node` |
 | sweep caliptra-ss | [`adc`](https://github.com/chipsalliance/caliptra-ss/blob/dfa6c631dbfc00c8e0c7e6b256619d03d74f0bdc/src/ast/rtl/adc.sv#L13) | ERROR: unknown macro or compiler directive '`ASSERT' | R3 `python3 ext_flow.py caliptra-ss adc` |
 | sweep cheshire | [`axi_riscv_amos_wrap`](https://github.com/pulp-platform/cheshire/blob/a315a828abb61cf3cb9f4419b910ebe6739b90bf/.bender/git/checkouts/axi_riscv_atomics-40ad8d2d0e0daa8b/src/axi_riscv_amos_wrap.sv#L18) | ERROR: replication constant can only be zero inside of a concatenation | R3 `python3 ext_flow.py cheshire axi_riscv_amos_wrap` |
 | sweep cheshire | [`axi_riscv_atomics_wrap`](https://github.com/pulp-platform/cheshire/blob/a315a828abb61cf3cb9f4419b910ebe6739b90bf/.bender/git/checkouts/cva6-20c9d7cbe0dd6995/corev_apu/src/axi_riscv_atomics/src/axi_riscv_atomics_wrap.sv#L18) | ERROR: replication constant can only be zero inside of a concatenation | R3 `python3 ext_flow.py cheshire axi_riscv_atomics_wrap` |
@@ -627,12 +612,13 @@ LRM rules slang enforces and the other two frontends relax. The source is what a
 | sweep verilog-ethernet | [`ssio_sdr_in_diff`](https://github.com/alexforencich/verilog-ethernet/blob/77320a9471d19c7dd383914bc049e02d9f4f1ffb/rtl/ssio_sdr_in_diff.v#L34) | ERROR: parameter 'IODDR_STYLE' does not exist in 'ssio_sdr_in' [-Wundefined-param-override] | R3 `python3 ext_flow.py verilog-ethernet ssio_sdr_in_diff` |
 | yosys test | [`run/arch/fabulous/prims`](https://github.com/chipsalliance/uhdm2rtlil/tree/main/test/run/arch/fabulous/prims) | dut.v:128: ERROR: port 'Q' does not exist in 'LUTFF' | R2 `./slang_coverage_sweep.sh --one run/arch/fabulous/prims` |
 
-### `$fatal` / `$error` raised at elaboration -- the design refuses this configuration -- 11
+### `$fatal` / `$error` raised at elaboration -- the design refuses this configuration -- 12
 
 | set | test | diagnostic | recipe |
 |---|---|---|---|
 | sweep axi | [`axi_fifo_delay_dyn`](https://github.com/pulp-platform/axi/blob/70b8e54fd460e3308e58be596ceb3566a6e3576e/src/axi_fifo_delay_dyn.sv#L19) | ERROR: $fatal encountered: Delay unit is not made for synthesis | R3 `python3 ext_flow.py axi axi_fifo_delay_dyn` |
 | sweep axi | [`axi_fifo_delay_dyn_intf`](https://github.com/pulp-platform/axi/blob/70b8e54fd460e3308e58be596ceb3566a6e3576e/src/axi_fifo_delay_dyn.sv#L172) | ERROR: $fatal encountered: Delay unit is not made for synthesis | R3 `python3 ext_flow.py axi axi_fifo_delay_dyn_intf` |
+| sweep black-parrot | [`bp_lce_req`](https://github.com/black-parrot/black-parrot/blob/710b0ea998c3b2f70ef9671d5619e439f13f826c/bp_me/src/v/lce/bp_lce_req.sv#L16) | ERROR: $error encountered: bedrock_block_width_p must be evenly divisible by data_width_p | R3 `python3 ext_flow.py black-parrot bp_lce_req` |
 | sweep cve2 | [`cve2_top_tracing`](https://github.com/openhwgroup/cve2/blob/d079e8c8e6a08b330940ae123876ba0612bec18d/rtl/cve2_top_tracing.sv#L10) | cve2/rtl/cve2_top_tracing.sv:87: ERROR: $fatal encountered: Fatal error: RVFI needs to be defined globally. | R3 `python3 ext_flow.py cve2 cve2_top_tracing` |
 | sweep pulpissimo | [`variable_latency_interconnect_wrap`](https://github.com/pulp-platform/pulpissimo/blob/bfc3d9a1ef72443464509a22d948f0a6f5b65b4c/.bender/git/checkouts/cluster_interconnect-37d6a544ba76227f/tb/tb_variable_latency_interconnect/hdl/variable_latency_interconnect_wrap.sv#L18) | ERROR: $fatal encountered: [variable_latency_bfly_net] NumOut < NumIn is not supported. | R3 `python3 ext_flow.py pulpissimo variable_latency_interconnect_wrap` |
 | sweep veer-eh1 | [`rvdffe`](https://github.com/chipsalliance/Cores-VeeR-EH1/blob/d04b1c7ae675a63dc4307cacfd10547ec937b928/design/lib/beh_lib.sv#L203) | ERROR: $error encountered: rvdffe.genblk1: rvdffe width must be >= 8 | R3 `python3 ext_flow.py veer-eh1 rvdffe` |
@@ -672,6 +658,19 @@ LRM rules slang enforces and the other two frontends relax. The source is what a
 | yosys test | [`run/various/reg_wire_error`](https://github.com/chipsalliance/uhdm2rtlil/tree/main/test/run/various/reg_wire_error) | dut.sv:26: ERROR: cannot assign to a net within a procedural context | R2 `./slang_coverage_sweep.sh --one run/various/reg_wire_error` |
 | yosys test | [`run/verilog/wire_and_var`](https://github.com/chipsalliance/uhdm2rtlil/tree/main/test/run/verilog/wire_and_var) | dut.sv:21: ERROR: cannot assign to a net within a procedural context | R2 `./slang_coverage_sweep.sh --one run/verilog/wire_and_var` |
 
+### elaboration at a degenerate parameter default (type parameter left `logic`, parameter without a value, packed type too wide) -- 8
+
+| set | test | diagnostic | recipe |
+|---|---|---|---|
+| sweep black-parrot | [`bp_be_ptw`](https://github.com/black-parrot/black-parrot/blob/710b0ea998c3b2f70ef9671d5619e439f13f826c/bp_be/src/v/bp_be_calculator/bp_be_ptw.sv#L5) | ERROR: packed type of 47741991755364 bits is too large; maximum width is 16777215 bits | R3 `python3 ext_flow.py black-parrot bp_be_ptw` |
+| sweep black-parrot | [`bp_mmu`](https://github.com/black-parrot/black-parrot/blob/710b0ea998c3b2f70ef9671d5619e439f13f826c/bp_common/src/v/bp_mmu.sv#L7) | ERROR: packed type of 124372044 bits is too large; maximum width is 16777215 bits | R3 `python3 ext_flow.py black-parrot bp_mmu` |
+| sweep black-parrot | [`bp_nd_socket`](https://github.com/black-parrot/black-parrot/blob/710b0ea998c3b2f70ef9671d5619e439f13f826c/bp_top/src/v/bp_nd_socket.sv#L11) | ERROR: packed type of 27638240 bits is too large; maximum width is 16777215 bits | R3 `python3 ext_flow.py black-parrot bp_nd_socket` |
+| sweep black-parrot | [`bp_tlb`](https://github.com/black-parrot/black-parrot/blob/710b0ea998c3b2f70ef9671d5619e439f13f826c/bp_common/src/v/bp_tlb.sv#L10) | ERROR: packed type of 124372044 bits is too large; maximum width is 16777215 bits | R3 `python3 ext_flow.py black-parrot bp_tlb` |
+| sweep core-v-mcu | [`axi_lite_to_axi`](https://github.com/openhwfoundation/core-v-mcu/blob/61fe7db2ebd13621975d97d484ef8fe99d3615a6/rtl/vendor/pulp_platform_axi/src/axi_lite_to_axi.sv#L18) | ERROR: invalid target type 'req_t' (aka 'logic') for assignment pattern | R3 `python3 ext_flow.py core-v-mcu axi_lite_to_axi` |
+| sweep core-v-mcu | [`axi_modify_address`](https://github.com/openhwfoundation/core-v-mcu/blob/61fe7db2ebd13621975d97d484ef8fe99d3615a6/rtl/vendor/pulp_platform_axi/src/axi_modify_address.sv#L18) | ERROR: invalid target type 'mst_req_t' (aka 'logic') for assignment pattern | R3 `python3 ext_flow.py core-v-mcu axi_modify_address` |
+| sweep core-v-mcu | [`synth_slice`](https://github.com/openhwfoundation/core-v-mcu/blob/61fe7db2ebd13621975d97d484ef8fe99d3615a6/rtl/vendor/pulp_platform_axi/test/axi_synth_bench.sv#L159) | ERROR: packed type of 536870911 bits is too large; maximum width is 16777215 bits | R3 `python3 ext_flow.py core-v-mcu synth_slice` |
+| sweep pulpissimo | [`tcdm_demux`](https://github.com/pulp-platform/pulpissimo/blob/bfc3d9a1ef72443464509a22d948f0a6f5b65b4c/.bender/git/checkouts/pulp_soc-b7e7c62781de8fd8/rtl/pulp_soc/tcdm_demux.sv#L24) | ERROR: instance of 'tcdm_demux' does not provide a value for parameter 'NR_ADDR_MAP_RULES' and it does not have a default value | R3 `python3 ext_flow.py pulpissimo tcdm_demux` |
+
 ### redefinition / duplicate definition -- 6
 
 | set | test | diagnostic | recipe |
@@ -693,15 +692,6 @@ LRM rules slang enforces and the other two frontends relax. The source is what a
 | sweep caliptra-ss | [`mci_mcu_sram_ctrl`](https://github.com/chipsalliance/caliptra-ss/blob/dfa6c631dbfc00c8e0c7e6b256619d03d74f0bdc/src/mci/rtl/mci_mcu_sram_ctrl.sv#L36) | ERROR: hierarchical references are not allowed in calls to '$bits' | R3 `python3 ext_flow.py caliptra-ss mci_mcu_sram_ctrl` |
 | sweep caliptra-ss | [`mci_mcu_trace_buffer`](https://github.com/chipsalliance/caliptra-ss/blob/dfa6c631dbfc00c8e0c7e6b256619d03d74f0bdc/src/mci/rtl/mci_mcu_trace_buffer.sv#L20) | ERROR: hierarchical references are not allowed in calls to '$bits' | R3 `python3 ext_flow.py caliptra-ss mci_mcu_trace_buffer` |
 | sweep caliptra-ss | [`mcu_mbox`](https://github.com/chipsalliance/caliptra-ss/blob/dfa6c631dbfc00c8e0c7e6b256619d03d74f0bdc/src/mci/rtl/mcu_mbox.sv#L37) | ERROR: hierarchical references are not allowed in calls to '$bits' | R3 `python3 ext_flow.py caliptra-ss mcu_mbox` |
-
-### elaboration at a degenerate parameter default (type parameter left `logic`, parameter without a value, packed type too wide) -- 4
-
-| set | test | diagnostic | recipe |
-|---|---|---|---|
-| sweep core-v-mcu | [`axi_lite_to_axi`](https://github.com/openhwfoundation/core-v-mcu/blob/61fe7db2ebd13621975d97d484ef8fe99d3615a6/rtl/vendor/pulp_platform_axi/src/axi_lite_to_axi.sv#L18) | ERROR: invalid target type 'req_t' (aka 'logic') for assignment pattern | R3 `python3 ext_flow.py core-v-mcu axi_lite_to_axi` |
-| sweep core-v-mcu | [`axi_modify_address`](https://github.com/openhwfoundation/core-v-mcu/blob/61fe7db2ebd13621975d97d484ef8fe99d3615a6/rtl/vendor/pulp_platform_axi/src/axi_modify_address.sv#L18) | ERROR: invalid target type 'mst_req_t' (aka 'logic') for assignment pattern | R3 `python3 ext_flow.py core-v-mcu axi_modify_address` |
-| sweep core-v-mcu | [`synth_slice`](https://github.com/openhwfoundation/core-v-mcu/blob/61fe7db2ebd13621975d97d484ef8fe99d3615a6/rtl/vendor/pulp_platform_axi/test/axi_synth_bench.sv#L159) | ERROR: packed type of 536870911 bits is too large; maximum width is 16777215 bits | R3 `python3 ext_flow.py core-v-mcu synth_slice` |
-| sweep pulpissimo | [`tcdm_demux`](https://github.com/pulp-platform/pulpissimo/blob/bfc3d9a1ef72443464509a22d948f0a6f5b65b4c/.bender/git/checkouts/pulp_soc-b7e7c62781de8fd8/rtl/pulp_soc/tcdm_demux.sv#L24) | ERROR: instance of 'tcdm_demux' does not provide a value for parameter 'NR_ADDR_MAP_RULES' and it does not have a default value | R3 `python3 ext_flow.py pulpissimo tcdm_demux` |
 
 ## synth-limit
 
@@ -803,10 +793,11 @@ Constructs sv-elab, read_slang's synthesis layer, does not lower yet.
 
 read_slang crashed, or produced a netlist that does not behave like the RTL while read_uhdm's does: a defect to report upstream (sv-elab, vendored in third_party/yosys/frontends/slang).  The 54 rows this class held on 2026-11-09 were each re-measured one by one on three toolchains after the Verilator #8657 lowering (#1542) and the slang PR 2106 patch (#1541) landed; the per-row result and classification are in [slang_cosim_retest_2026-11-10.md](slang_cosim_retest_2026-11-10.md).
 
-### netlist diverges from the RTL under Verilator (read_uhdm's does not) -- 24
+### netlist diverges from the RTL under Verilator (read_uhdm's does not) -- 25
 
 | set | test | diagnostic | recipe |
 |---|---|---|---|
+| sweep black-parrot | [`bp_be_issue_queue`](https://github.com/black-parrot/black-parrot/blob/710b0ea998c3b2f70ef9671d5619e439f13f826c/bp_be/src/v/bp_be_checker/bp_be_issue_queue.sv#L5) | ❌ 3 div; read_uhdm ✅ PASS (301 cycles, 294 active) | R3 `python3 ext_flow.py black-parrot bp_be_issue_queue` |
 | sweep black-parrot | [`bp_io_tile`](https://github.com/black-parrot/black-parrot/blob/710b0ea998c3b2f70ef9671d5619e439f13f826c/bp_top/src/v/bp_io_tile.sv#L6) | ❌ 2 div; read_uhdm ✅ PASS (301 cycles, 251 active) | R3 `python3 ext_flow.py black-parrot bp_io_tile` |
 | sweep core-v-mcu | [`cv32e40p_register_file`](https://github.com/openhwfoundation/core-v-mcu/blob/61fe7db2ebd13621975d97d484ef8fe99d3615a6/rtl/vendor/openhwgroup_cv32e40p/rtl/cv32e40p_register_file_latch.sv#L32) | ❌ 230 div; read_uhdm ✅ PASS (301 cycles, 271 active) | R3 `python3 ext_flow.py core-v-mcu cv32e40p_register_file` |
 | sweep core-v-mcu | [`fpnew_fma_multi`](https://github.com/openhwfoundation/core-v-mcu/blob/61fe7db2ebd13621975d97d484ef8fe99d3615a6/rtl/vendor/pulp_platform_fpnew/src/fpnew_fma_multi.sv#L16) | ❌ 14 div; read_uhdm ✅ PASS (301 cycles, 297 active) | R3 `python3 ext_flow.py core-v-mcu fpnew_fma_multi` |
@@ -968,7 +959,7 @@ A sweep row that co-simulates clean with the `read_slang` netlist and diverges
 with ours is OUR defect; such rows are tracked in the sweeps and listed here in
 the same format as the classes above, with their status on `main` only.
 
-**Status on `main`: this class is EMPTY.**  32 row(s) ever listed here co-simulate clean
+**Status on `main`: 3 row(s) open.**  32 row(s) ever listed here co-simulate clean
 with the `read_uhdm` netlist on `main` and are not listed; the fixes that
 closed them, by row, are in `test/slang_uhdm_div_closed.txt`:
 
@@ -1011,7 +1002,13 @@ A row listed below is open: the latest sweep reports show it diverging with the
 `read_uhdm` netlist and it is not in the closed list.  A closed row that comes back
 is a regression, not a stale entry.
 
-**0** open row(s).
+**3** open row(s).
+
+| set | test | verdicts | recipe |
+|---|---|---|---|
+| sweep black-parrot | [`bp_be_dcache`](https://github.com/black-parrot/black-parrot/blob/710b0ea998c3b2f70ef9671d5619e439f13f826c/bp_be/src/v/bp_be_dcache/bp_be_dcache.sv#L77) | read_slang ✅ PASS; read_uhdm ❌ 106 div (slang clean) | R3 `python3 ext_flow.py black-parrot bp_be_dcache` |
+| sweep black-parrot | [`bp_be_pipe_mem`](https://github.com/black-parrot/black-parrot/blob/710b0ea998c3b2f70ef9671d5619e439f13f826c/bp_be/src/v/bp_be_calculator/bp_be_pipe_mem.sv#L16) | read_slang ✅ PASS; read_uhdm ❌ 10 div (slang clean) | R3 `python3 ext_flow.py black-parrot bp_be_pipe_mem` |
+| sweep black-parrot | [`bp_core_lite`](https://github.com/black-parrot/black-parrot/blob/710b0ea998c3b2f70ef9671d5619e439f13f826c/bp_top/src/v/bp_core_lite.sv#L13) | read_slang ✅ PASS; read_uhdm ❌ 212 div (slang clean) | R3 `python3 ext_flow.py black-parrot bp_core_lite` |
 
 Two of the divergences localised on the way were the REFERENCE's, not ours,
 and are recorded rather than fixed: Verilator masks an out-of-range index into
