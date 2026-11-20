@@ -32,6 +32,11 @@ on:
         required: false
         type: string
         default: "12000000"
+      surelog_mem_limit_kb:
+        description: "ulimit -v budget (KB) for the Surelog step of an ext_flow row only; empty = mem_limit_kb.  BlackParrot's whole-core rows need 13-19 GB of address space for Surelog alone (9.5-14.3 GB resident) while their miters keep the 12 GB default."
+        required: false
+        type: string
+        default: ""
       jobs:
         description: "concurrent miters (JOBS) and co-sims (--jobs) per shard; 1 serialises them for a family whose heaviest Verilator builds do not fit two-at-a-time in 16 GB"
         required: false
@@ -196,6 +201,7 @@ jobs:
         # --shard runs only this shard's ~1/N of the modules; each shard writes
         # its rows as JSON, merged into the final table by the `merge` job.
         MEM_LIMIT_KB=${{ inputs.mem_limit_kb }} \
+        SURELOG_MEM_LIMIT_KB=${{ inputs.surelog_mem_limit_kb }} \
         JOBS=${{ inputs.jobs }} FULL_SWEEP=1 python3 core_sweep.py ${{ inputs.core }} \
           --cycles ${{ inputs.cycles }} --jobs ${{ inputs.jobs }} \
           --shard ${{ matrix.shard }}/${{ inputs.shards }} \

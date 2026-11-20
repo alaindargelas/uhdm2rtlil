@@ -52,8 +52,17 @@ jobs:
       # shard needs 3.2-5.0 h and the fourth one went past the 5 h job limit
       # on every nightly from 10-22 to 10-24 -- cancelled with no rows, and
       # the merge job published a 94-row report.  Eight shards of ~16 rows
-      # sit around 2 h each.  Top rows that exceed the memory limit get an
-      # `overrides` entry or a documented skip rather than a raised ulimit
-      # (16 GB would OOM the runner itself).
+      # sit around 2 h each.
       shards: 8
       jobs: "1"
+      # The whole-core rows (bp_processor, bp_unicore*, bp_core*,
+      # bp_multicore, bp_cacc_tile_node) need more address space than the
+      # 12 GB default for SURELOG only.  Measured with Surelog 1.89, no text
+      # dump (the manifest's dump_limit_mb: 0): bp_multicore peaks at
+      # 18.7 GB virtual but 14.3 GB resident, bp_processor 15.2 / 11.6 GB,
+      # bp_core_complex 15.3 / 11.5 GB; the other eight are lower.
+      # bp_cacc_tile_node is excluded in the manifest: its elaboration
+      # exceeds 28 GB resident, which no address-space cap can contain.
+      # Resident memory is what has to fit the 16 GB runner, and jobs: "1"
+      # keeps one such Surelog per runner.  Miters and co-sims keep 12 GB.
+      surelog_mem_limit_kb: "20000000"

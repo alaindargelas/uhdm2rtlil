@@ -57,7 +57,7 @@ EXT = Path(os.environ.get("EXT_IP_ROOT", os.path.expanduser("~/ext")))
 # and the Surelog wall-clock budget, which scales with the closure: the flat
 # 900 s was written for hand-sized modules and is not enough for a generated
 # whole-core top.
-DUMP_LIMIT = 2 << 20
+DUMP_LIMIT = 2 << 20   # a manifest may lower it ("dump_limit_mb")
 # Closure size above which the design is checked hierarchically instead of flat.
 FLATTEN_LIMIT = 8 << 20
 # Optional manifest cap ("max_closure_mb"): a module whose source closure is
@@ -112,8 +112,13 @@ def sh(cmd, cwd=None, timeout=None, env=None):
 
 
 
-def _capped(cmd):
+def _capped(cmd, surelog=False):
     """Cap the address space when MEM_LIMIT_KB is set.
+
+    `surelog=True` takes SURELOG_MEM_LIMIT_KB instead when that is set: a
+    family whose whole-core rows need more address space for Surelog alone
+    (BlackParrot: 13-19 GB virtual against 9.5-14.3 GB resident) raises only
+    that step, and its miters and co-sims keep MEM_LIMIT_KB.
 
     The miter and the co-sim already do this; Surelog and the two elaborations
     did not, and for an ext family those run FIRST.  A blowup there does not
@@ -123,7 +128,8 @@ def _capped(cmd):
     family's result behind a failed workflow.  Capped, the row fails on its own
     and the rest of the sweep still reports.
     """
-    mem = os.environ.get("MEM_LIMIT_KB")
+    mem = (surelog and os.environ.get("SURELOG_MEM_LIMIT_KB")) \
+        or os.environ.get("MEM_LIMIT_KB")
     if not mem:
         return cmd
     return ["bash", "-c", f"ulimit -Sv {mem}; exec \"$@\"", "--"] + [str(c) for c in cmd]
@@ -479,7 +485,7 @@ def _iface_port_wrapper(w, fam, mod, files, def_flags=(), inc_flags=(), src_byte
         subprocess.run(["rm", "-rf", str(bw)])
         bw.mkdir(parents=True, exist_ok=True)
         brc, bout = sh(_capped([str(S), "-parse", *def_flags, *inc_flags,
-                                "-top", mod, *files]),
+                                "-top", mod, *files], surelog=True),
                        cwd=bw, timeout=_sl_timeout(src_bytes))
         (bw / "surelog.log").write_text(bout or "")
         if brc == 0 and (bw / "slpp_all" / "surelog.uhdm").exists():
@@ -846,7 +852,7 @@ def run_module(fam, cl, m, seq, tmo, want, incs, defines, cycles, do_cosim, surv
         # only while the closure is small.
         dump = ["-d", "uhdm"] if src_bytes <= DUMP_LIMIT else []
         rc, out = sh(_capped([str(S), "-parse", *dump, *def_flags, *inc_flags,
-                              "-top", top, *files]),
+                              "-top", top, *files], surelog=True),
                      cwd=w, timeout=_sl_timeout(src_bytes))
         (w / "surelog.log").write_text(out or "")
     # An EMPTY surelog.uhdm counts as no elaboration.  Surelog creates the
@@ -1200,7 +1206,9 @@ def main():
     cl = Closure([str(HERE / r) for r in man.get("harness_roots", [])] + man["roots"],
                  exclude_srcs=man.get("exclude_srcs", []))
     excl = [re.compile(x) for x in man.get("exclude", [])]
-    global MAX_CLOSURE_BYTES, ALWAYS_SRCS, SLANG_FLAGS, UNIT_IMPORTS
+    global MAX_CLOSURE_BYTES, ALWAYS_SRCS, SLANG_FLAGS, UNIT_IMPORTS, DUMP_LIMIT
+    if "dump_limit_mb" in man:
+        DUMP_LIMIT = int(float(man["dump_limit_mb"]) * (1 << 20))
     UNIT_IMPORTS = list(man.get("unit_imports", []))
     SLANG_FLAGS = " ".join(man.get("slang_flags", []))
     global READ_TIMEOUT
