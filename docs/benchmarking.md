@@ -47,7 +47,7 @@ line and in the total:
 | **VeeR EL2** | 91 | 78 | 82 | 82 | 0 | 0 | 83 | 83 | 0 | 0 | 0 |
 | **VeeR EH2** | 100 | 81 | 94 | 92 | **2** | 0 | 94 | 93 | 0 | 1 | 0 |
 | **RSD** | 165 | 118 | 137 | 133 | **3** | 1 | 140 | 139 | 0 | 1 | 0 |
-| **BlackParrot** | 125 | 50 | 45 | 42 | **1** | 2 | 45 | 43 | 0 | 2 | 0 |
+| **BlackParrot** | 121 | 54 | 62 | 58 | **2** | 2 | 69 | 61 | **6** | 2 | 0 |
 | **OpenTitan** (upstream) | 32 | 28 | 29 | 28 | 0 | 1 | 29 | 28 | 0 | 1 | 0 |
 | **OpenTitan IP library** (upstream, the other 44 blocks) | 605 | 508 | 506 | 498 | **2** | 6 | 506 | 500 | **1** | 5 | 0 |
 | **Pavona** (300 modules + 100 chip instances) | 400 | 382 | 389 | 380 | 0 | 9 | 389 | 380 | 0 | 9 | 0 |
@@ -62,14 +62,15 @@ line and in the total:
 | **sv-yosys-issues** (the YosysHQ/yosys SystemVerilog-issue corpus of `test/yosys_issues`) | 212 | 151 | 150 | 141 | 0 | 9 | 177 | 162 | **1** | 14 | 0 |
 | **sv-elab-issues** (the povik/sv-elab issue corpus of `test/sv_elab_issues`) | 138 | 60 | 49 | 46 | **1** | 2 | 62 | 58 | 0 | 4 | 0 |
 | **slang-issues** (the MikePopoloski/slang synthesizable issue corpus of `test/slang_issues`) | 178 | 65 | 55 | 49 | **2** | 4 | 65 | 53 | **3** | 9 | 0 |
-| **All sweeps** (23 workflows) | **12989** | **9855** | **10287** | **10096** | **61** | **130** | **10480** | **10289** | **14** | **177** | **0** |
+| **All sweeps** (23 workflows) | **12985** | **9859** | **10304** | **10112** | **62** | **130** | **10504** | **10307** | **20** | **177** | **0** |
 
-**14 `read_uhdm` divergences** across 10480 co-simulated rows: 10289 pass
+**20 `read_uhdm` divergences** across 10504 co-simulated rows: 10307 pass
 outright and 177 are divergences a SAT miter proved to be simulation
-artefacts.  The 14:
+artefacts.  The 20:
 
 | family | rows | status |
 |---|---|---|
+| BlackParrot | 6 | `bp_be_dcache` (106 cycles), `bp_be_pipe_mem` (10) and `bp_core_lite` (212), `read_slang` clean -- OPEN; all three contain the data cache, `bp_be_dcache` being the smallest.  `bp_core_complex` (46), `bp_l2e_tile_node` (29) and `bp_multicore` (279): no `read_slang` netlist to adjudicate against.  None of the six had been co-simulated before: `read_slang` could not read the first three until #1628, and the whole cores did not elaborate until Surelog 1.89 |
 | Cheshire, CORE-V MCU, PULPissimo | 7 | rows `read_slang` cannot read, so there is no reference to adjudicate against: simulation models (`SimDTM`, `tcdm_model`, `obi_sim_mem`, `cam_vip`) and interface shims (`apbt1_interface`, `tcdm_interface`, `axi_rt_unit_top_xilinx`) |
 | OpenPiton | 2 | `l2_state` / `l2_state_wrap`, 1 and 4 cycles, `read_slang` clean -- FIXED by #1626 (a reduction operand sized by its comparison's context); both rows re-measured equivalent with co-sim PASS, and drop out of this count at the next openpiton sweep |
 | OpenTitan IP library | 1 | `rstmgr_crash_info`, 202 cycles; `read_slang` cannot elaborate it -- OPEN |
@@ -77,27 +78,31 @@ artefacts.  The 14:
 | slang-issues | 3 | #1124 and #331 (`read_slang` cannot read them) and #1154 -- OPEN |
 
 `read_slang`, measured on the same rows under the same stimulus, diverges on
-61 of its own (130 more rows are divergences both netlists share, the miter
+62 of its own (130 more rows are divergences both netlists share, the miter
 adjudicated, or have no oracle).  The `read_slang` divergences are listed with
 their reasons in [slang_unsupported.md](slang_unsupported.md).
 
 ### Provenance
 
 The numbers are the **latest passing run of each of the 23 sweep workflows**,
-2026-11-13 to 2026-11-19, 83 family reports in `build/sweeps/_night1119`,
-counted by [`test/sweep_table.py`](../test/sweep_table.py): **12989 rows, 9855
-formally proven, `read_uhdm` 10289 co-sim passes, `read_slang` 10096**, 0
+2026-11-13 to 2026-11-20, 83 family reports in `build/sweeps/_night1120`,
+counted by [`test/sweep_table.py`](../test/sweep_table.py): **12985 rows, 9859
+formally proven, `read_uhdm` 10307 co-sim passes, `read_slang` 10112**, 0
 undriven.  Two reports come from an earlier run because their latest one is
 not a measurement: `cva6-chip` (CVA6's 138 core instantiations) from run
 43412896065 (2026-11-13) -- the 2026-11-19 run checked 0 instances, because
 Yosys 0.71's `write_rtlil` emits opaque names the chip flow's parser does not
 match -- and Pavona's `dragonfly` chip from run 43418474506 (2026-11-17) --
-the 2026-11-18 run's `read_uhdm` aborted on it.
+the 2026-11-18 run's `read_uhdm` aborted on it.  BlackParrot is run
+44762800276 (2026-11-20, the first on Surelog 1.89) for 93 rows; two of its
+eight shards lost their runner (`bp_processor`, `bp_unicore` and `bp_core_tile`
+exhaust a 16 GB runner after elaboration), so their other 28 rows come from
+run 44569024237 (2026-11-19).
 
 Run ids: ibex 44504032091, rp32 44288489743, fx68k 44350613084, scr1
 44285880138, rggen 44240724529, veer-eh1 43587204429, tnoc 44240875698,
 veer-el2 44545955378, veer-eh2 44308586589, rsd 43591293624, black-parrot
-43454727336, opentitan 43446954850, ext (External IP + OpenTitan IP library +
+44762800276 (+ 44569024237), opentitan 43446954850, ext (External IP + OpenTitan IP library +
 XiangShan library) 43587707813, pavona 44302889060, cva6 44517128170,
 cva6-flavours 44313299440, caliptra 44319308050, xiangshan-core 44314007261,
 sv-tests 44521091542, sv-synth-tests 44309068602, sv-yosys-issues
