@@ -13267,6 +13267,61 @@ RTLIL::SigSpec UhdmImporter::import_ref_obj(const ref_obj* uhdm_ref, const UHDM:
         // Check for enum constant
         if (actual->UhdmType() == uhdmenum_const) {
             const UHDM::enum_const* enum_val = any_cast<const UHDM::enum_const*>(actual);
+            // UHDM's ElaboratorListener (run by read_uhdm when Surelog saved
+            // the design unelaborated) binds a name by walking the instance
+            // stack outward, ACROSS module boundaries.  An anonymous enum
+            // declared inside a generate block is not registered for its
+            // scope, so its constant can bind to a same-named one of the
+            // INSTANTIATING module: black-parrot's bp_me_stream_pump_control
+            // (`enum logic {e_ready, e_stream}` in `begin : nz`) took
+            // bp_lce_req's `e_ready` = 1 from `enum logic [2:0] {e_reset,
+            // e_ready, ...}`, so its idle state read as e_stream and every
+            // LCE stream pump started mid-transfer (bp_core_lite, 212
+            // diverging co-sim cycles).  A constant declared in another
+            // module's definition is invisible here (LRM 23.9): look the name
+            // up in the ref's own scopes instead.  A package / $unit enum has
+            // no module ancestor and is left alone.
+            {
+                auto module_of = [](const UHDM::any* o) -> const UHDM::module_inst* {
+                    for (const UHDM::any* a = o ? o->VpiParent() : nullptr; a; a = a->VpiParent())
+                        if (a->UhdmType() == uhdmmodule_inst)
+                            return any_cast<const UHDM::module_inst*>(a);
+                    return nullptr;
+                };
+                const UHDM::module_inst* ref_mod = module_of(uhdm_ref);
+                const UHDM::module_inst* enum_mod = module_of(enum_val);
+                if (ref_mod && enum_mod && ref_mod->VpiDefName() != enum_mod->VpiDefName()) {
+                    auto in_enum = [&](const UHDM::typespec* ts) -> const UHDM::enum_const* {
+                        auto et = dynamic_cast<const UHDM::enum_typespec*>(ts);
+                        if (!et || !et->Enum_consts()) return nullptr;
+                        for (auto c : *et->Enum_consts())
+                            if (c->VpiName() == ref_name) return c;
+                        return nullptr;
+                    };
+                    const UHDM::enum_const* own = nullptr;
+                    for (const UHDM::any* a = uhdm_ref->VpiParent(); a && !own; a = a->VpiParent()) {
+                        if (auto sc = dynamic_cast<const UHDM::scope*>(a)) {
+                            if (sc->Variables())
+                                for (auto v : *sc->Variables()) {
+                                    auto ve = dynamic_cast<const UHDM::expr*>(v);
+                                    if (ve && ve->Typespec())
+                                        if ((own = in_enum(ve->Typespec()->Actual_typespec()))) break;
+                                }
+                            if (!own && sc->Typespecs())
+                                for (auto ts : *sc->Typespecs())
+                                    if ((own = in_enum(ts))) break;
+                        }
+                        if (a == ref_mod) break;
+                    }
+                    if (own) {
+                        if (mode_debug)
+                            uhdm_trace("UHDM: enum constant %s bound into %s, rebound to its own "
+                                "scope's declaration\n", ref_name.c_str(),
+                                std::string(enum_mod->VpiDefName()).c_str());
+                        enum_val = own;
+                    }
+                }
+            }
             // Get the enum value - enum constants store their value in VpiValue
             std::string val_str = std::string(enum_val->VpiValue());
             
