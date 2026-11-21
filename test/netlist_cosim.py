@@ -32,7 +32,7 @@ Prints (parsed by core_sweep.py):
 and on a failure to run: NO_RUN (<why>) / <tag> Verilator build FAILED: ...
 Exit 2 = NO_RUN (nothing to compare), 1 = build/sim failure, 0 = compared.
 """
-import argparse, json, os, re, subprocess, sys
+import argparse, json, os, re, signal, subprocess, sys
 from pathlib import Path
 
 ap = argparse.ArgumentParser()
@@ -79,11 +79,63 @@ tag_name = Path(args.work).name
 
 
 def sh(cmd, log=None, cwd=WORK, timeout=None):
-    r = subprocess.run(cmd, cwd=cwd, text=True, capture_output=True, timeout=timeout,
-                       errors="replace")
+    # Its own session, and on a timeout the whole GROUP is killed.
+    # subprocess.run(timeout=) kills only the direct child -- for a build that
+    # is the `verilator` perl wrapper -- and left verilator_bin, make and every
+    # cc1plus running.  Those orphans kept compiling after the row was scored
+    # (black-parrot bp_cce_dir: two cc1plus at 10.3 + 8.9 GB, 28 min later).
+    p = subprocess.Popen(cmd, cwd=cwd, text=True, stdout=subprocess.PIPE,
+                         stderr=subprocess.PIPE, errors="replace",
+                         start_new_session=True)
+    try:
+        out, err = p.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(p.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        p.communicate()
+        raise
+    r = subprocess.CompletedProcess(cmd, p.returncode, out, err)
     if log:
         (WORK / log).write_text(r.stdout + r.stderr)
     return r
+
+
+# A Verilator --build compiles with one cc1plus per core, and on a big
+# netlist each of them can need several GB: black-parrot bp_cce_dir's 87 MB
+# read_slang netlist (50x ours) made Verilator 5.054 emit C++ whose compile
+# ran two cc1plus at 10.3 and 8.9 GB.  Every process is under the row's
+# MEM_LIMIT_KB address-space cap, so nothing failed -- their SUM took the
+# 16 GB CI runner down ("The runner has received a shutdown signal") on
+# three nightlies in a row.  For a big input the compile parallelism is
+# therefore set by available memory, one job per COSIM_BUILD_JOB_KB (default
+# MEM_LIMIT_KB, else 12 GB); a small input keeps every core.
+BIG_NETLIST_BYTES = int(os.environ.get("COSIM_BIG_NETLIST_MB", "20")) << 20
+
+
+def _mem_available_kb():
+    try:
+        for l in Path("/proc/meminfo").read_text().splitlines():
+            if l.startswith("MemAvailable:"):
+                return int(l.split()[1])
+    except (OSError, ValueError, IndexError):
+        pass
+    return None
+
+
+def build_jobs(inputs):
+    """Extra Verilator flags bounding the C++ build's parallelism."""
+    size = sum(os.path.getsize(f) for f in inputs if os.path.isfile(f))
+    avail = _mem_available_kb()
+    if size < BIG_NETLIST_BYTES or avail is None:
+        return []
+    per_job = int(os.environ.get("COSIM_BUILD_JOB_KB")
+                  or os.environ.get("MEM_LIMIT_KB") or 12_000_000)
+    jobs = max(1, min(os.cpu_count() or 1, avail // per_job))
+    print(f"{tag_name}: {size >> 20} MB input, {avail >> 20} GB available: "
+          f"--build-jobs {jobs}")
+    return ["--build-jobs", str(jobs)]
 
 
 def paths(fname):
@@ -495,11 +547,14 @@ if dpi_names:
 builds = {
     # The RTL build elaborates only `TOP` (with the instance's parameters) but
     # parses the whole chip source list, exactly like the chip elaboration.
-    "rtl": VFLAGS + ["--Mdir", "obj_rtl", "-o", "sim_rtl"] + incs + srcs + ["tb_rtl.sv"],
-    "uhdm": VFLAGS + ["--Mdir", "obj_uhdm", "-o", "sim_uhdm"] + [str(nl), "tb.sv"],
+    "rtl": VFLAGS + build_jobs(srcs) + ["--Mdir", "obj_rtl", "-o", "sim_rtl"] + incs + srcs
+           + ["tb_rtl.sv"],
+    "uhdm": VFLAGS + build_jobs([nl]) + ["--Mdir", "obj_uhdm", "-o", "sim_uhdm"]
+            + [str(nl), "tb.sv"],
 }
 if have_slang:
-    builds["slang"] = VFLAGS + ["--Mdir", "obj_slang", "-o", "sim_slang"] + [str(slang_nl), "tb.sv"]
+    builds["slang"] = VFLAGS + build_jobs([slang_nl]) + ["--Mdir", "obj_slang", "-o", "sim_slang"] \
+        + [str(slang_nl), "tb.sv"]
 traces = {}
 guarded_stubbed = set()
 for tag, flags in builds.items():
