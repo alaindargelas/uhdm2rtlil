@@ -82,4 +82,20 @@ echo "▶ proving read_sv == Verilog frontend (SAT)"
     hierarchy -top miter
     sat -prove-asserts -seq 8 -set-init-zero -verify miter"
 
-echo "✅ read_sv smoke test PASSED (in-memory Surelog compile, equivalent to Verilog frontend, no .uhdm written)"
+# (4) A source Surelog rejects must fail the read.  Surelog recovers from a
+# syntax error and still returns a design, so read_sv has to check its error
+# counts itself, as the `surelog` executable does for its exit code.
+printf 'module bad(input a, output b);\n  assign b = a +;\nendmodule\n' > bad.sv
+echo "▶ read_sv must refuse a syntax error"
+if "$YOSYS" -m "$PLUGIN" -q -p "read_sv -parse -nobuiltin bad.sv" > bad.log 2>&1; then
+    echo "❌ read_sv accepted a file with a syntax error:"
+    cat bad.log
+    exit 1
+fi
+if ! grep -q "read_sv: Surelog reported" bad.log; then
+    echo "❌ read_sv failed on the syntax error, but not with the expected message:"
+    cat bad.log
+    exit 1
+fi
+
+echo "✅ read_sv smoke test PASSED (in-memory Surelog compile, equivalent to Verilog frontend, no .uhdm written, syntax error refused)"
