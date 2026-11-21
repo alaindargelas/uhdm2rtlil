@@ -185,9 +185,11 @@ struct ReadSVPass : public Pass {
         log("import the elaborated in-memory UHDM design into RTLIL — without\n");
         log("writing or re-reading a .uhdm file.\n");
         log("\n");
-        log("Parse/compile/elaborate and in-memory UHDM elaboration are forced\n");
-        log("on; UHDM-file writing is forced off.  Pass any other Surelog flag\n");
-        log("(e.g. -nobuiltin, +incdir+, -D, -top) as usual.\n");
+        log("The flow's default Surelog options are always applied:\n");
+        log("    -parse -nobuiltin -sverilog -DSYNTHESIS -filterprotected\n");
+        log("In-memory UHDM elaboration is forced on and UHDM-file writing off.\n");
+        log("Pass any other Surelog flag (e.g. +incdir+, -I, -D, --top-module)\n");
+        log("as usual.\n");
         log("\n");
         log("Plugin options (consumed, not passed to Surelog):\n");
         uhdm_trace("    -uhdm_debug      enable importer debug output\n");
@@ -210,6 +212,21 @@ struct ReadSVPass : public Pass {
         // verbatim, except for the few plugin-only options we consume here.
         std::vector<std::string> sl_args;
         sl_args.push_back("surelog");
+        // The flow's default Surelog options (test_uhdm_workflow.sh, the
+        // sweeps), so that a bare `read_sv <files>` reads a design the way
+        // `surelog ... && read_uhdm` does -- except -nocache: outside plugin
+        // development Surelog's parse cache is wanted.  They are passed as
+        // FLAGS rather than set through the CommandLineParser setters: `-parse`
+        // also turns on writePpOutput, which hands the preprocessed text to the parser,
+        // and setParse() alone parsed nothing -- a read without `-parse`
+        // imported zero modules and accepted a syntax error.
+        //   -parse       parse, compile and elaborate
+        //   -nobuiltin   do not compile Surelog's builtin classes (mailbox,
+        //                process, semaphore): nothing to synthesize
+        //   -sverilog    every file is SystemVerilog, whatever its extension
+        sl_args.push_back("-parse");
+        sl_args.push_back("-nobuiltin");
+        sl_args.push_back("-sverilog");
         // This is a SYNTHESIS front end: define the `SYNTHESIS` macro so that
         // `\`ifndef SYNTHESIS` sim-only regions (assertions, functional-coverage
         // `DV_FCOV_*`, `$display`, testbench hooks) are excluded — the same as

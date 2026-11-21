@@ -98,4 +98,18 @@ if ! grep -q "read_sv: Surelog reported" bad.log; then
     exit 1
 fi
 
+# (5) read_sv applies the flow's default Surelog options itself, so a bare
+# `read_sv <file>` must parse: import the smoke design and refuse the syntax
+# error.  Before, both reads imported nothing and succeeded.
+echo "▶ a bare read_sv must parse"
+"$YOSYS" -m "$PLUGIN" -q -p "
+    read_sv dut.sv
+    hierarchy -top read_sv_smoke
+    select -assert-count 1 t:\$add"
+if "$YOSYS" -m "$PLUGIN" -q -p "read_sv bad.sv" > bad_noparse.log 2>&1; then
+    echo "❌ read_sv without -parse accepted a file with a syntax error:"
+    cat bad_noparse.log
+    exit 1
+fi
+
 echo "✅ read_sv smoke test PASSED (in-memory Surelog compile, equivalent to Verilog frontend, no .uhdm written, syntax error refused)"
