@@ -268,6 +268,20 @@ struct ReadSVPass : public Pass {
             log_cmd_error("read_sv: Surelog compilation failed\n");
         }
 
+        // Surelog keeps going after a syntax error, a fatal or an error and
+        // still hands back a design built from what it could parse, so
+        // `start_compiler` succeeding says nothing about the source being
+        // legal.  The `surelog` executable reports these in its exit code;
+        // refuse the read on the same three counts, or a file that does not
+        // compile is imported as if it did.
+        const SURELOG::ErrorContainer::Stats stats = errors->getErrorStats();
+        if (stats.nbFatal || stats.nbSyntax || stats.nbError) {
+            SURELOG::shutdown_compiler(compiler);
+            delete clp; delete errors; delete symbolTable;
+            log_cmd_error("read_sv: Surelog reported %d fatal, %d syntax and %d other error(s)\n",
+                          stats.nbFatal, stats.nbSyntax, stats.nbError);
+        }
+
         vpiHandle vpi_design = SURELOG::get_uhdm_design(compiler);
         UHDM::design* uhdm_design =
             vpi_design ? UhdmDesignFromVpiHandle(vpi_design) : nullptr;
