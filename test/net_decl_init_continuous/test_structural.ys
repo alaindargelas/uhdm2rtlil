@@ -1,0 +1,10 @@
+read_uhdm slpp_all/surelog.uhdm
+hierarchy -check -top net_decl_init_continuous
+proc
+# The nets' initializers are drivers, so check sees no init/driver conflict.
+check -assert
+# Only the reg keeps an initial value: \a, \b and \n must carry no \init.
+select -assert-count 0 w:a a:init %i
+select -assert-count 0 w:b a:init %i
+select -assert-count 0 w:n a:init %i
+select -assert-count 1 w:r_init a:init %i
