@@ -325,7 +325,7 @@ int64_t UhdmImporter::evaluate_expression(const any* expr,
                 }
                 
                 default:
-                    log_warning("Unsupported operation type %d in expression evaluation\n", op_type);
+                    warn_once(stringf("Unsupported operation type %d in expression evaluation\n", op_type));
                     break;
             }
             break;
@@ -364,7 +364,7 @@ int64_t UhdmImporter::evaluate_expression(const any* expr,
             if (result.is_fully_const()) {
                 return result.as_const().as_int();
             }
-            log_warning("System function call in interpreter did not resolve to constant\n");
+            warn_once("System function call in interpreter did not resolve to constant\n");
             return 0;
         }
 
@@ -402,7 +402,15 @@ void UhdmImporter::interpret_statement(const any* stmt,
                                       std::map<std::string, std::vector<int64_t>>& arrays,
                                       bool& break_flag, bool& continue_flag) {
     if (!stmt) return;
-    
+    // Statement budget per initial block (see interp_budget_exceeded_):
+    // once spent, every further statement is a no-op so the enclosing loops
+    // unwind quickly, and import_initial discards the whole block.
+    if (interp_budget_exceeded_) return;
+    if (++interp_steps_ > kInterpStepBudget) {
+        interp_budget_exceeded_ = true;
+        return;
+    }
+
     int stmt_type = stmt->UhdmType();
     
     switch (stmt_type) {
@@ -737,8 +745,12 @@ void UhdmImporter::interpret_statement(const any* stmt,
                 iteration_count++;
             }
 
+            // A loop stopped by the cap has NOT finished: its variables hold
+            // a partial result (a 9M-iteration `acc = acc + 1` read 100001).
+            // Abandon the block rather than emit it (interp_budget_exceeded_).
             if (iteration_count >= MAX_ITERATIONS) {
                 log_warning("For loop exceeded maximum iterations (%d)\n", MAX_ITERATIONS);
+                interp_budget_exceeded_ = true;
             }
 
             // Remove for-loop declared variables so bare name reverts to
@@ -777,6 +789,7 @@ void UhdmImporter::interpret_statement(const any* stmt,
             if (rep->VpiCondition())
                 count = evaluate_expression(rep->VpiCondition(), variables, arrays);
             const int64_t MAX_ITERATIONS = 100000;
+            if (count > MAX_ITERATIONS) interp_budget_exceeded_ = true;
             for (int64_t i = 0; i < count && i < MAX_ITERATIONS; i++) {
                 if (rep->VpiStmt())
                     interpret_statement(rep->VpiStmt(), variables, arrays, break_flag, continue_flag);
@@ -791,7 +804,8 @@ void UhdmImporter::interpret_statement(const any* stmt,
             const while_stmt* ws = any_cast<const while_stmt*>(stmt);
             int iter = 0;
             const int MAX_ITERATIONS = 100000;
-            while (iter++ < MAX_ITERATIONS) {
+            while (true) {
+                if (iter++ >= MAX_ITERATIONS) { interp_budget_exceeded_ = true; break; }
                 if (!ws->VpiCondition()) break;
                 if (evaluate_expression(ws->VpiCondition(), variables, arrays) == 0) break;
                 if (ws->VpiStmt())
@@ -811,7 +825,8 @@ void UhdmImporter::interpret_statement(const any* stmt,
             const UHDM::forever_stmt* fs = any_cast<const UHDM::forever_stmt*>(stmt);
             int iter = 0;
             const int MAX_ITERATIONS = 100000;
-            while (fs->VpiStmt() && iter++ < MAX_ITERATIONS) {
+            while (fs->VpiStmt()) {
+                if (iter++ >= MAX_ITERATIONS) { interp_budget_exceeded_ = true; break; }
                 interpret_statement(fs->VpiStmt(), variables, arrays, break_flag, continue_flag);
                 if (break_flag) { break_flag = false; break; }
                 if (continue_flag) continue_flag = false;
@@ -830,8 +845,9 @@ void UhdmImporter::interpret_statement(const any* stmt,
                 if (break_flag) { break_flag = false; break; }
                 if (continue_flag) continue_flag = false;
                 if (!dw->VpiCondition()) break;
-            } while (iter++ < MAX_ITERATIONS &&
-                     evaluate_expression(dw->VpiCondition(), variables, arrays) != 0);
+                if (evaluate_expression(dw->VpiCondition(), variables, arrays) == 0) break;
+                if (iter++ >= MAX_ITERATIONS) { interp_budget_exceeded_ = true; break; }
+            } while (true);
             break;
         }
 

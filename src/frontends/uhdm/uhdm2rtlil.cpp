@@ -4207,6 +4207,7 @@ static bool pattern_item_key(const UHDM::any* item, bool& is_default, long& inde
 }
 
 void UhdmImporter::import_module(const module_inst* uhdm_module) {
+    warned_once_.clear();
     // Per-module array classification sets are recomputed below for THIS
     // module; restore the caller's on exit.  A child imported from inside the
     // parent's import (an instance in a generate scope) otherwise wiped the
