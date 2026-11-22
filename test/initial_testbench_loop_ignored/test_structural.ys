@@ -1,0 +1,13 @@
+read_sv -nonote -noinfo -nowarning dut.sv
+hierarchy -check -top initial_testbench_loop_ignored
+proc
+opt_clean
+check -assert
+# The testbench loop leaves nothing behind: no display cells, no stim driver.
+select -assert-count 0 t:$print
+select -assert-count 0 w:stim %ci1 c:* %i
+# ... and drives nothing: unrolled, it left stim and the loop counter i
+# driven with the loop's final values.
+select -assert-count 0 w:stim w:i
+# The flop is intact.
+select -assert-count 1 t:$dff

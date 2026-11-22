@@ -5203,6 +5203,67 @@ void UhdmImporter::import_always(const process_stmt* uhdm_process, RTLIL::Proces
 // Import initial block
 // Helper: check if a UHDM statement tree contains complex control flow (if/case)
 // that requires the comb approach with switch rules instead of the sync approach
+// Does `stmt` hold a timing control (`#d`, `@(...)`, `wait`) inside a loop?
+// Such an initial block is a time-evolving TESTBENCH (drive, wait, check,
+// repeat), not an initialization: no logic can reproduce it, and unrolling
+// it is all the reader can do -- Icarus ivtest slongint_test unrolled
+// 3 x 500 iterations of `#1; ar = {$random, $random}; #1; if (bu !== ar)`
+// into 446k cells in 15 s, and `proc` then never finished.  A delay OUTSIDE
+// any loop is still read with the delay ignored (`e = #10 c;`, 9.4.5).
+static bool stmt_has_timing_in_loop(const any* stmt, bool in_loop) {
+    if (!stmt) return false;
+    auto any_of = [&](const VectorOfany* v, bool l) {
+        if (v) for (auto c : *v) if (stmt_has_timing_in_loop(c, l)) return true;
+        return false;
+    };
+    switch (stmt->VpiType()) {
+        case vpiDelayControl:
+            if (in_loop) return true;
+            return stmt_has_timing_in_loop(any_cast<const delay_control*>(stmt)->Stmt(), in_loop);
+        case vpiEventControl:
+            if (in_loop) return true;
+            return stmt_has_timing_in_loop(any_cast<const event_control*>(stmt)->Stmt(), in_loop);
+        case vpiWait:
+            return in_loop;
+        case vpiBegin:
+            return any_of(any_cast<const UHDM::begin*>(stmt)->Stmts(), in_loop);
+        case vpiNamedBegin:
+            return any_of(any_cast<const UHDM::named_begin*>(stmt)->Stmts(), in_loop);
+        case vpiFork:
+            return any_of(any_cast<const UHDM::fork_stmt*>(stmt)->Stmts(), in_loop);
+        case vpiNamedFork:
+            return any_of(any_cast<const UHDM::named_fork*>(stmt)->Stmts(), in_loop);
+        case vpiIf:
+            return stmt_has_timing_in_loop(any_cast<const if_stmt*>(stmt)->VpiStmt(), in_loop);
+        case vpiIfElse: {
+            auto ie = any_cast<const if_else*>(stmt);
+            return stmt_has_timing_in_loop(ie->VpiStmt(), in_loop) ||
+                   stmt_has_timing_in_loop(ie->VpiElseStmt(), in_loop);
+        }
+        case vpiCase: {
+            auto cs = any_cast<const case_stmt*>(stmt);
+            if (cs->Case_items())
+                for (auto it : *cs->Case_items())
+                    if (stmt_has_timing_in_loop(it->Stmt(), in_loop)) return true;
+            return false;
+        }
+        case vpiFor:
+            return stmt_has_timing_in_loop(any_cast<const for_stmt*>(stmt)->VpiStmt(), true);
+        case vpiWhile:
+            return stmt_has_timing_in_loop(any_cast<const while_stmt*>(stmt)->VpiStmt(), true);
+        case vpiRepeat:
+            return stmt_has_timing_in_loop(any_cast<const repeat*>(stmt)->VpiStmt(), true);
+        case vpiForever:
+            return stmt_has_timing_in_loop(any_cast<const forever_stmt*>(stmt)->VpiStmt(), true);
+        case vpiDoWhile:
+            return stmt_has_timing_in_loop(any_cast<const do_while*>(stmt)->VpiStmt(), true);
+        case vpiForeachStmt:
+            return stmt_has_timing_in_loop(any_cast<const foreach_stmt*>(stmt)->VpiStmt(), true);
+        default:
+            return false;
+    }
+}
+
 static bool statement_contains_control_flow(const any* stmt) {
     if (!stmt) return false;
     int type = stmt->VpiType();
@@ -6242,6 +6303,14 @@ void UhdmImporter::import_initial(const process_stmt* uhdm_process, RTLIL::Proce
             in_initial_block = false;
             return;
         }
+    }
+
+    if (stmt_has_timing_in_loop(uhdm_process->Stmt(), false)) {
+        log_warning("%s: initial block repeats a timing control (#delay / @event "
+                    "/ wait) in a loop: a simulation testbench, not synthesizable; "
+                    "ignored.\n", get_src_attribute(uhdm_process).c_str());
+        in_initial_block = false;
+        return;
     }
 
     // Choose import strategy based on initial block content:
