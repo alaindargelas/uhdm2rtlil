@@ -1,0 +1,7 @@
+read_uhdm slpp_all/surelog.uhdm
+hierarchy -check -top tf_mutual_recursion_runtime_bound
+proc
+opt_clean
+# The read itself used to die of a stack overflow.  The output is unaffected.
+sat -verify -set a 1'0 -prove y 1'1
+sat -verify -set a 1'1 -prove y 1'0
