@@ -1240,3 +1240,13 @@ Test: partsel
     Verilator 5.054 (unlike 5.048) and read_verilog read the base as -4 and
     return {din[3:0], xxxx}.  An X-vs-value difference on an out-of-range
     select, ~1 cycle in 200 per output; read_uhdm agrees with read_slang.
+
+Test: initial_interp_budget
+    By design.  The test's initial block counts to 9,000,000 in a
+    `do ... while` loop, past the initial-block interpreter's budget, and
+    the reader ABANDONS such a block rather than emit a partial value (it
+    used to stop each loop at 100k iterations and keep acc = 100001).  So
+    `o` (= acc) has no driver in the netlist, while Verilator runs the loop
+    and reads 9000000.  The test's gate is test_structural.ys (no init and
+    no logic left behind for acc; `k` still initialised); `k` agrees in the
+    co-sim.
