@@ -4229,6 +4229,7 @@ void UhdmImporter::import_module(const module_inst* uhdm_module) {
             self->clocked_access_arrays = std::move(clocked_acc);
         }
     } classification_guard(this);
+    decl_init_sta_.clear();
     // A child imported from inside the parent's generate scope must not
     // evaluate its own expressions against the PARENT's gen_scope:
     // import_gen_scope leaves current_scope set while its instances import,

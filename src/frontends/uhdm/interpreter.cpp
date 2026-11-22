@@ -88,6 +88,10 @@ int64_t UhdmImporter::evaluate_expression(const any* expr,
                 }
             }
 
+            {
+                int64_t mv = 0;
+                if (interp_module_value(name, -1, mv)) return mv;
+            }
             return 0;
         }
 
@@ -343,6 +347,9 @@ int64_t UhdmImporter::evaluate_expression(const any* expr,
                     if (index >= 0 && index < (int64_t)it->second.size()) {
                         return it->second[index];
                     }
+                } else if (!variables.count(array_name)) {
+                    int64_t mv = 0;
+                    if (interp_module_value(array_name, index, mv)) return mv;
                 }
             }
             break;
@@ -395,6 +402,59 @@ static inline bool is_integer_var_type(int t) {
     return t == UHDM::uhdmint_var || t == UHDM::uhdminteger_var ||
            t == UHDM::uhdmshort_int_var || t == UHDM::uhdmlong_int_var ||
            t == UHDM::uhdmbyte_var;
+}
+
+bool UhdmImporter::interp_module_value(const std::string& name, int64_t index,
+                                       int64_t& out) {
+    if (!module || name.empty()) return false;
+    RTLIL::Wire* w = nullptr;
+    std::string gen_scope = get_current_gen_scope();
+    auto lookup = [&](const std::string& n) -> RTLIL::Wire* {
+        if (!gen_scope.empty()) {
+            auto it = name_map.find(gen_scope + "." + n);
+            if (it != name_map.end()) return it->second;
+        }
+        auto it = name_map.find(n);
+        if (it != name_map.end()) return it->second;
+        return module->wire(uid(RTLIL::escape_id(n)));
+    };
+    int bit = -1;
+    if (index >= 0) {
+        // An element wire `\name[i]`, or bit i of a vector.
+        w = lookup(name + "[" + std::to_string(index) + "]");
+        if (!w) {
+            w = lookup(name);
+            if (!w) return false;
+            bit = w->upto ? (w->start_offset + w->width - 1 - (int)index)
+                          : ((int)index - w->start_offset);
+            if (bit < 0 || bit >= w->width) return false;
+        }
+    } else {
+        w = lookup(name);
+    }
+    if (!w || w->width > 64) return false;
+    RTLIL::SigSpec sig = bit >= 0 ? RTLIL::SigSpec(w, bit, 1) : RTLIL::SigSpec(w);
+    RTLIL::Const val;
+    auto ia = w->attributes.find(ID::init);
+    if (ia != w->attributes.end()) {
+        RTLIL::Const c = ia->second;
+        val = bit >= 0 ? c.extract(bit, 1) : c;
+    } else {
+        if (!interp_ce_) interp_ce_.reset(new ConstEval(module));
+        interp_ce_->clear();
+        if (!interp_ce_->eval(sig)) return false;
+        val = sig.as_const();
+    }
+    if (!val.is_fully_def()) return false;
+    bool sgn = bit < 0 && w->is_signed;
+    out = sgn && val.size() > 0 && val.size() < 64 && val.back() == RTLIL::State::S1
+          ? (int64_t)(val.as_int(true)) : (int64_t)val.as_int(false);
+    if (val.size() > 32) {
+        uint64_t u = 0;
+        for (int i = val.size() - 1; i >= 0; i--) u = (u << 1) | (val[i] == RTLIL::State::S1);
+        out = (int64_t)u;
+    }
+    return true;
 }
 
 void UhdmImporter::interpret_statement(const any* stmt,
