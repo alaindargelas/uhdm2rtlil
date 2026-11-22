@@ -82,6 +82,12 @@ def mode_for(p):
             return m
     return None
 
+def text_dump_wanted():
+    v = os.environ.get("UHDM_TEXT_DUMP")
+    if v is not None:
+        return v not in ("", "0")
+    return not os.environ.get("CI")
+
 def run(cmd, cwd, timeout):
     t0 = time.time()
     try:
@@ -353,7 +359,10 @@ def run_test(args, rel, path, p):
     open(os.path.join(work, "slang.log"), "w").write(log)
     res["slang"] = verdict(rc, log); res["slang_err"] = first_error(log, "slang") if rc else ""
     # ---- uhdm (our workflow's Surelog flags, then read_uhdm + the mode script)
-    cmd = [SURELOG, "-parse", "-nobuiltin", "-nocache", "-DSYNTHESIS", "-filterprotected", "-d", "uhdm", "-sverilog", "-nonote", "-noinfo"]
+    # The textual UHDM dump (`-d uhdm`) is a local debugging aid, off under CI
+    # like ext_flow.py's (see text_dump_wanted() there).
+    dump = ["-d", "uhdm"] if text_dump_wanted() else []
+    cmd = [SURELOG, "-parse", "-nobuiltin", "-nocache", "-DSYNTHESIS", "-filterprotected", *dump, "-sverilog", "-nonote", "-noinfo"]
     if p["top_module"].strip(): cmd += ["--top-module", p["top_module"].strip()]
     cmd += ["-I" + i for i in incs] + ["-D" + d for d in defs] + files
     rc, log, dt = run(cmd, work, timeout)

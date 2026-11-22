@@ -58,6 +58,23 @@ EXT = Path(os.environ.get("EXT_IP_ROOT", os.path.expanduser("~/ext")))
 # 900 s was written for hand-sized modules and is not enough for a generated
 # whole-core top.
 DUMP_LIMIT = 2 << 20   # a manifest may lower it ("dump_limit_mb")
+
+
+def text_dump_wanted():
+    """Whether Surelog should also print the TEXTUAL UHDM dump (`-d uhdm`).
+
+    It is a local debugging aid and nothing in the harness reads it back, but
+    it is not small: RSD MemoryIssueStage (a 2 MB-closure row) dumps 53 M
+    lines, 2.1 GB, and does not finish inside the 900 s read budget.  On a
+    16 GB runner that got RSD shard 6 killed outright, and core-v-mcu,
+    opentitan-ip and veer-eh2 rows dump 0.4-1.7 GB too.  So it is off under
+    CI (GitHub Actions always sets CI) and on locally; UHDM_TEXT_DUMP=1 / 0
+    overrides either way.
+    """
+    v = os.environ.get("UHDM_TEXT_DUMP")
+    if v is not None:
+        return v not in ("", "0")
+    return not os.environ.get("CI")
 # Closure size above which the design is checked hierarchically instead of flat.
 FLATTEN_LIMIT = 8 << 20
 # Optional manifest cap ("max_closure_mb"): a module whose source closure is
@@ -110,6 +127,21 @@ def sh(cmd, cwd=None, timeout=None, env=None):
             out = out.decode(errors="replace")
         return 124, out + "\nTIMEOUT"
 
+
+
+def sh_log(cmd, log, cwd=None, timeout=None):
+    """sh(), but the output goes STRAIGHT to the file `log`, never into this
+    process: a Surelog text dump is gigabytes, and sh() held all of it (2.1 GB
+    resident for a whole row, 8.7 GB at the peak while decoding it).  Returns
+    the exit code; a timeout appends the same TIMEOUT marker sh() returns."""
+    with open(log, "w", errors="replace") as f:
+        try:
+            return subprocess.run(cmd, cwd=cwd, timeout=timeout,
+                                  stdout=f, stderr=subprocess.STDOUT).returncode
+        except subprocess.TimeoutExpired:
+            f.flush()
+            f.write("\nTIMEOUT")
+            return 124
 
 
 def _capped(cmd, surelog=False):
@@ -850,11 +882,10 @@ def run_module(fam, cl, m, seq, tmo, want, incs, defines, cycles, do_cosim, surv
         # debugging aid we want on a small module and a disk hazard on a big
         # one: XiangShan's XSTop (3.2 M lines) dumps 8.5 GB of text.  Keep it
         # only while the closure is small.
-        dump = ["-d", "uhdm"] if src_bytes <= DUMP_LIMIT else []
-        rc, out = sh(_capped([str(S), "-parse", *dump, *def_flags, *inc_flags,
-                              "-top", top, *files], surelog=True),
-                     cwd=w, timeout=_sl_timeout(src_bytes))
-        (w / "surelog.log").write_text(out or "")
+        dump = ["-d", "uhdm"] if text_dump_wanted() and src_bytes <= DUMP_LIMIT else []
+        sh_log(_capped([str(S), "-parse", *dump, *def_flags, *inc_flags,
+                        "-top", top, *files], surelog=True),
+               w / "surelog.log", cwd=w, timeout=_sl_timeout(src_bytes))
     # An EMPTY surelog.uhdm counts as no elaboration.  Surelog creates the
     # file before serialising into it, so a crash while WRITING the database
     # -- capnproto's `calloc(...): Cannot allocate memory` when the address
