@@ -14646,6 +14646,19 @@ bool UhdmImporter::emit_dynamic_expanded_elem_field_write_sync(const assignment*
     return true;
 }
 
+// A plain (non-compound) assignment whose RHS EXPRESSION is signed must
+// sign-extend into a wider target.  The imported RHS is often not the
+// declared wire at all -- a blocking variable's in-flight value, a folded
+// constant -- so `rhs.as_wire()->is_signed` alone missed it: `logic signed
+// [8:0] z = -1; os = z;` (os 10 bits) produced 10'h1ff instead of 10'h3ff.
+static bool plain_assign_rhs_signed(UhdmImporter* imp, const assignment* a) {
+    if (!a) return false;
+    int op = a->VpiOpType();
+    if (op != 0 && op != vpiAssignmentOp && op != vpiRhs) return false;
+    auto e = dynamic_cast<const UHDM::expr*>(a->Rhs());
+    return e && imp->is_expr_signed(e);
+}
+
 void UhdmImporter::import_assignment_sync(const assignment* uhdm_assign, RTLIL::SyncRule* sync) {
     uhdm_trace("            import_assignment_sync called\n");
     log_flush();
@@ -15299,7 +15312,8 @@ void UhdmImporter::import_assignment_sync(const assignment* uhdm_assign, RTLIL::
                 rhs = {rhs, RTLIL::SigSpec(RTLIL::State::S0, lhs.size() - rhs.size())};
             } else {
                 // Sign-extend if RHS is a signed wire or expression result
-                bool rhs_is_signed = rhs.is_wire() && rhs.as_wire()->is_signed;
+                bool rhs_is_signed = (rhs.is_wire() && rhs.as_wire()->is_signed) ||
+                                     plain_assign_rhs_signed(this, uhdm_assign);
                 rhs.extend_u0(lhs.size(), rhs_is_signed);
             }
         } else {
@@ -19771,7 +19785,8 @@ void UhdmImporter::import_assignment_comb(const assignment* uhdm_assign, RTLIL::
                 // (LRM 11.4.14.3), see import_assignment_sync.
                 rhs = {rhs, RTLIL::SigSpec(RTLIL::State::S0, lhs.size() - rhs.size())};
             } else {
-                bool rhs_is_signed = rhs.is_wire() && rhs.as_wire()->is_signed;
+                bool rhs_is_signed = (rhs.is_wire() && rhs.as_wire()->is_signed) ||
+                                     plain_assign_rhs_signed(this, uhdm_assign);
                 rhs.extend_u0(lhs.size(), rhs_is_signed);
             }
         } else {
@@ -20323,7 +20338,8 @@ void UhdmImporter::import_assignment_comb(const assignment* uhdm_assign, RTLIL::
                 // (LRM 11.4.14.3), see import_assignment_sync.
                 rhs = {rhs, RTLIL::SigSpec(RTLIL::State::S0, lhs.size() - rhs.size())};
             } else {
-                bool rhs_is_signed = rhs.is_wire() && rhs.as_wire()->is_signed;
+                bool rhs_is_signed = (rhs.is_wire() && rhs.as_wire()->is_signed) ||
+                                     plain_assign_rhs_signed(this, uhdm_assign);
                 rhs.extend_u0(lhs.size(), rhs_is_signed);
             }
         } else {
