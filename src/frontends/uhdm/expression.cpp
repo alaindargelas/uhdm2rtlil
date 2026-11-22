@@ -3310,18 +3310,68 @@ RTLIL::Const UhdmImporter::extract_const_from_value(const std::string& value_str
     }
     
     // Handle different value formats from UHDM
-    if (value_str.substr(0, 4) == "INT:") {
-        int int_val = std::stoi(value_str.substr(4));
-        // Return as 32-bit integer by default
-        return RTLIL::Const(int_val, 32);
-    } else if (value_str.substr(0, 5) == "UINT:") {
-        unsigned long long uint_val = std::stoull(value_str.substr(5));
-        // Determine width based on value
-        int width = 32;
-        if (uint_val > UINT32_MAX) {
-            width = 64;
+    if (value_str.substr(0, 4) == "INT:" || value_str.substr(0, 5) == "UINT:") {
+        // A decimal value of ANY magnitude.  `INT:` went through std::stoi,
+        // which throws std::out_of_range past 32 bits -- and nothing caught
+        // it, so `parameter longint size_in_bits_p = 2**33;` (basejump_stl's
+        // bsg_dramsim3_pkg, folded by Surelog to INT:8589934592) aborted
+        // read_uhdm with "terminate called ... stoi".  That package is in the
+        // shared file list of every sv-tests basejump test, so all 357 of
+        // them died before reaching their own module.  `UINT:` had the same
+        // problem past 64 bits (std::stoull).
+        // Width: 32 bits when the value fits (the old default, which callers
+        // rely on for `int`-sized parameters), else just wide enough for the
+        // magnitude plus, for INT, the sign bit.
+        bool is_int = value_str[0] == 'I';
+        std::string digits = value_str.substr(is_int ? 4 : 5);
+        bool neg = false;
+        size_t pos = 0;
+        if (pos < digits.size() && (digits[pos] == '-' || digits[pos] == '+')) {
+            neg = digits[pos] == '-';
+            pos++;
         }
-        return RTLIL::Const(uint_val, width);
+        // Magnitude, LSB first, by repeated decimal multiply-add.
+        std::vector<RTLIL::State> mag;
+        bool any_digit = false;
+        for (; pos < digits.size(); pos++) {
+            char c = digits[pos];
+            if (c < '0' || c > '9') break;
+            any_digit = true;
+            int carry = c - '0';
+            for (auto& b : mag) {
+                int v = (b == RTLIL::State::S1 ? 1 : 0) * 10 + carry;
+                b = (v & 1) ? RTLIL::State::S1 : RTLIL::State::S0;
+                carry = v >> 1;
+            }
+            while (carry) {
+                mag.push_back((carry & 1) ? RTLIL::State::S1 : RTLIL::State::S0);
+                carry >>= 1;
+            }
+        }
+        if (!any_digit) return RTLIL::Const(0, 32);
+        while (!mag.empty() && mag.back() == RTLIL::State::S0) mag.pop_back();
+        // Two's-complement width of an INT (one sign bit, except -2^(n-1),
+        // which fits in n bits); a UINT needs its magnitude only.
+        int need = (int)mag.size();
+        if (is_int) {
+            bool pow2 = !mag.empty() &&
+                std::count(mag.begin(), mag.end(), RTLIL::State::S1) == 1;
+            if (!(neg && pow2)) need++;
+        }
+        // Unchanged for anything that fits in 64 bits: 32 when it fits, else
+        // 64 (what the stoi/stoull path produced, and a longint's width).
+        int width = need <= 32 ? 32 : need <= 64 ? 64 : need;
+        std::vector<RTLIL::State> bits(width, RTLIL::State::S0);
+        for (size_t i = 0; i < mag.size(); i++) bits[i] = mag[i];
+        if (neg) {
+            // two's complement: invert, add one
+            for (auto& b : bits) b = (b == RTLIL::State::S1) ? RTLIL::State::S0 : RTLIL::State::S1;
+            for (auto& b : bits) {
+                if (b == RTLIL::State::S0) { b = RTLIL::State::S1; break; }
+                b = RTLIL::State::S0;
+            }
+        }
+        return RTLIL::Const(bits);
     } else if (value_str.substr(0, 4) == "BIN:") {
         std::string bin_str = value_str.substr(4);
         // `BIN:X` (upper case) is how Surelog spells an x digit it folded
@@ -8112,13 +8162,25 @@ RTLIL::SigSpec UhdmImporter::import_constant(const constant* uhdm_const) {
             // as DEC:? and stoll threw on it (sv-tests 5.7.1--integers-signed).
             if (dec_str.find_first_of("zZ?") != std::string::npos)
                 return RTLIL::SigSpec(RTLIL::Const(RTLIL::State::Sz, width));
-            try {
-                // Use stoll to handle larger integers
-                long long int_val = std::stoll(dec_str);
-                return RTLIL::SigSpec(RTLIL::Const(int_val, width));
-            } catch (const std::exception& e) {
-                log_error("Failed to parse decimal constant: value='%s', substr='%s', error=%s\n",
-                         value.c_str(), dec_str.c_str(), e.what());
+            {
+                // A decimal literal of ANY size.  std::stoll stopped at 63
+                // bits and the read aborted ("Failed to parse decimal
+                // constant": ivtest pow_unsigned's 97-bit
+                // DEC:277555756156289135105907917022705078125, pr2352834's
+                // 64-bit DEC:9223372036854775808).  extract_const_from_value
+                // parses arbitrary magnitudes; the result is then sized to the
+                // literal's width, sign-extending a negative one as the
+                // Const(long long, width) construction did.
+                size_t p0 = (!dec_str.empty() && (dec_str[0] == '-' || dec_str[0] == '+')) ? 1 : 0;
+                if (p0 >= dec_str.size() ||
+                    dec_str.find_first_not_of("0123456789", p0) != std::string::npos)
+                    log_error("Failed to parse decimal constant: value='%s', substr='%s'\n",
+                              value.c_str(), dec_str.c_str());
+                bool neg = dec_str[0] == '-';
+                RTLIL::Const c = extract_const_from_value((neg ? "INT:" : "UINT:") + dec_str);
+                if (c.size() != width)
+                    c = c.extract(0, width, neg ? RTLIL::State::S1 : RTLIL::State::S0);
+                return RTLIL::SigSpec(c);
             }
         }
         case vpiIntConst: {
