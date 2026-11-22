@@ -1,0 +1,11 @@
+# read_sv: the crash was in Surelog's in-process UHDM elaboration
+# (UhdmAdjuster reducing $bits / $size), which read_uhdm of a prebuilt
+# surelog.uhdm never runs.
+read_sv -nonote -noinfo -nowarning dut.sv
+hierarchy -check -top unpacked_typedef_array_var_bits
+proc
+opt_clean
+# The read used to segfault.  $bits(T) is 2 x 8 = 16, $size(y) is 2, and the
+# elements carry their own values.
+sat -verify -prove bits_t 16 -prove size_y 2
+sat -verify -set a 8'h5a -prove y0 8'h5a -prove y1 8'ha5
