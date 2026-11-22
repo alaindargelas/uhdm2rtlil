@@ -400,6 +400,13 @@ def main():
                     help="co-sim cycles per test; 0 disables the co-sim columns")
     ap.add_argument("--no-deep", dest="deep", action="store_false",
                     help="only sv-tests' own read verdict -- skip formal / undriven / co-sim")
+    ap.add_argument("--ivtest", metavar="IVERILOG_DIR",
+                    help="also sweep the Icarus ivtest suite: generate its "
+                         "tests with sv-tests' own generators/ivtest from this "
+                         "iverilog checkout (sv-tests' third_party/tools/icarus) "
+                         "-- 2.5k tests, 362 of them should-fail")
+    ap.add_argument("--ivtest-only", action="store_true",
+                    help="with --ivtest: skip sv-tests' own chapter tests")
     ap.set_defaults(deep=True)
     a = ap.parse_args()
     # sv-tests' OWN tests only: the LRM chapter trees, `generic`, and
@@ -417,7 +424,32 @@ def main():
         return head[1].startswith("chapter-") or head[1] == "generic"
 
     tests = []
-    for dp, dn, fn in os.walk(os.path.join(a.repo, "tests")):
+    if a.ivtest:
+        # sv-tests generates its ivtest rows (`regress-*_iv`) from the iverilog
+        # submodule; do the same into <out>/generated so a clone without that
+        # submodule can still sweep them.  CE / RE entries of ivtest's lists
+        # become `:should_fail_because:` tests.
+        gen = os.path.join(a.out, "ivtest_gen")
+        tp = os.path.join(gen, "third_party", "tools")
+        os.makedirs(tp, exist_ok=True)
+        link = os.path.join(tp, "icarus")
+        if os.path.islink(link):
+            os.unlink(link)
+        os.symlink(os.path.abspath(a.ivtest), link)
+        env = dict(os.environ, THIRD_PARTY_DIR=os.path.join(gen, "third_party"),
+                   TESTS_DIR=os.path.join(gen, "tests"),
+                   CONF_DIR=os.path.join(a.repo, "conf"))
+        subprocess.run([sys.executable, os.path.join(a.repo, "generators", "ivtest"), "ivtest"],
+                       env=env, check=True, capture_output=True)
+        ivdir = os.path.join(gen, "tests", "generated", "ivtest")
+        for f in sorted(os.listdir(ivdir)):
+            path = os.path.join(ivdir, f); rel = os.path.join("generated", "ivtest", f)
+            if a.filter and not re.search(a.filter, rel):
+                continue
+            p = parse_header(path)
+            if p:
+                tests.append((rel, path, p))
+    for dp, dn, fn in ([] if a.ivtest_only else os.walk(os.path.join(a.repo, "tests"))):
         rel_dir = os.path.relpath(dp, a.repo)
         if not is_local_test_dir(rel_dir):
             dn[:] = []                       # do not descend
