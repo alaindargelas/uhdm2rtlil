@@ -15635,6 +15635,28 @@ RTLIL::SigSpec UhdmImporter::import_bit_select_inner(const bit_select* uhdm_bit,
                                     signal_name.c_str(), idx, elem_w, off);
                             return slice;
                         }
+                        // OUT OF RANGE: the read yields X for a 4-state
+                        // parameter and 0 for a 2-state one (IEEE 1800-2017
+                        // 11.5.1).  It fell through to the wire lookup below
+                        // and aborted the read ("Could not find wire 'pvar0'
+                        // for bit select": ivtest sel_rval_bit_ob /
+                        // sel_rval_part_ob probe `pvar0[32]` of a 32-bit
+                        // parameter on purpose).
+                        bool two_state = false;
+                        if (auto rts = param->Typespec())
+                            if (auto ats = rts->Actual_typespec())
+                                switch (ats->UhdmType()) {
+                                    case uhdmbit_typespec: case uhdmint_typespec:
+                                    case uhdmbyte_typespec: case uhdmshort_int_typespec:
+                                    case uhdmlong_int_typespec:
+                                        two_state = true; break;
+                                    default: break;
+                                }
+                        if (mode_debug)
+                            uhdm_trace("    Bit-select on parameter %s[%d]: out of range -> %s\n",
+                                signal_name.c_str(), idx, two_state ? "0" : "x");
+                        return RTLIL::SigSpec(RTLIL::Const(
+                            two_state ? RTLIL::State::S0 : RTLIL::State::Sx, elem_w));
                     } else {
                         // DYNAMIC index into a parameter constant
                         // (`FmtUnitTypes[dst_fmt_i]`): extract the element
