@@ -1,0 +1,11 @@
+# read_sv: Surelog's in-process elaboration (-elabuhdm) is where UH0718 was
+# raised and the read aborted.
+read_sv -nonote -noinfo -nowarning dut.sv
+hierarchy -check -top unit_scope_var_procedural
+proc
+opt_clean
+check -assert
+# The $unit variables are real variables of the module, written procedurally.
+sat -verify -set a 1 -prove o 1
+sat -verify -set a 0 -prove o 0
+sat -verify -set d 8'h41 -prove q 8'h42 -prove s 4'h4

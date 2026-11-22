@@ -1,0 +1,9 @@
+# read_sv: Surelog's in-process elaboration (-elabuhdm) is where the read
+# aborted on UH0701 / UH0718.
+read_sv -nonote -noinfo -nowarning dut.sv
+hierarchy -check -top var_decl_in_block
+proc
+opt_clean
+check -assert
+# Each `var` form is a variable of the declared width and signing.
+sat -verify -set d 8'h81 -prove o1 1 -prove o8 8'h81 -prove os 9'h1ff -prove ow 10'h381
