@@ -1,0 +1,7 @@
+read_sv -nonote -noinfo -nowarning dut.sv
+hierarchy -check -top dyn_array_new
+proc
+opt_clean
+check -assert
+sat -verify -prove o0 0 -prove o1 1 -prove b0 8'd1 -prove b3 8'd4 -prove i2 8'd0 -prove q0 0 -prove q1 1 -prove ok 1
+

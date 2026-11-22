@@ -8318,6 +8318,26 @@ RTLIL::SigSpec UhdmImporter::import_constant(const constant* uhdm_const) {
             return RTLIL::SigSpec(RTLIL::Const(ival, width));
         }
         case vpiStringConst: {
+            // The right bound of a DYNAMIC / queue / associative unpacked
+            // dimension (`a[]`, `q[$]`, `m[string]`) is a string marker on a
+            // range.  Read as text it is a number of several ASCII bytes:
+            // br_gh460's `reg a[]` became 1.8 million element wires and the
+            // read never finished.  Model the array as a fixed one sized by
+            // its largest constant `new[N]` in the module (bound N-1); a
+            // typedef'd dimension has no array name, so take the largest
+            // allocation seen; with none, one element.
+            if ((value == "STRING:unsized" || value == "STRING:$" ||
+                 value == "STRING:associative") &&
+                uhdm_const->VpiParent() &&
+                uhdm_const->VpiParent()->UhdmType() == uhdmrange) {
+                int n = 1;
+                const UHDM::any* owner = uhdm_const->VpiParent()->VpiParent();
+                auto it = owner ? dyn_array_new_size.find(std::string(owner->VpiName()))
+                                : dyn_array_new_size.end();
+                if (it != dyn_array_new_size.end()) n = it->second;
+                else for (auto& kv : dyn_array_new_size) n = std::max(n, kv.second);
+                return RTLIL::SigSpec(RTLIL::Const(std::max(n, 1) - 1, 32));
+            }
             // Handle string constants like "FOO" (format: "STRING:FOO")
             std::string str_val;
             if (value.substr(0, 7) == "STRING:") {

@@ -3828,7 +3828,27 @@ std::string UhdmImporter::type_param_signature(const module_inst* uhdm_module) {
 void UhdmImporter::collect_proc_elem_written(const module_inst* uhdm_module) {
     proc_elem_written.clear();
     src_lhs_names.clear();
+    dyn_array_new_size.clear();
     if (!uhdm_module) return;
+    // `arr = new[N]` / `arr = new[N](src)` with a constant N: remember the
+    // largest N per array (see dyn_array_new_size).
+    auto note_new = [&](const assignment* a) {
+        if (!a || !a->Rhs() || a->Rhs()->UhdmType() != uhdmmethod_func_call) return;
+        auto mc = any_cast<const method_func_call*>(a->Rhs());
+        if (!mc || mc->VpiName() != "new" || !mc->Tf_call_args() ||
+            mc->Tf_call_args()->empty() || !a->Lhs())
+            return;
+        auto c = dynamic_cast<const constant*>((*mc->Tf_call_args())[0]);
+        if (!c) return;
+        RTLIL::Const v = extract_const_from_value(std::string(c->VpiValue()));
+        if (v.size() == 0 || !v.is_fully_def()) return;
+        int n = v.as_int();
+        if (n < 0 || n > (1 << 20)) return;
+        std::string b = std::string(a->Lhs()->VpiName());
+        if (b.empty()) return;
+        int& cur = dyn_array_new_size[b];
+        cur = std::max(cur, n);
+    };
     // Base name of ANY write target: `x`, `x[i]`, `x[h:l]`, `x[b +: w]`,
     // `x[i][j]`, `s.f` / `s.f[i]` (the struct base), `{a, b}` (each operand).
     std::function<void(const any*)> note_lhs;
@@ -3875,7 +3895,7 @@ void UhdmImporter::collect_proc_elem_written(const module_inst* uhdm_module) {
         if (!node) return;
         switch (node->VpiType()) {
             case vpiAssignment: case vpiAssignStmt:
-                if (auto a = any_cast<const assignment*>(node)) note_lhs(a->Lhs());
+                if (auto a = any_cast<const assignment*>(node)) { note_lhs(a->Lhs()); note_new(a); }
                 break;
             case vpiBegin: case vpiNamedBegin:
                 if (auto stmts = begin_block_stmts(node))
@@ -3919,6 +3939,7 @@ void UhdmImporter::collect_proc_elem_written(const module_inst* uhdm_module) {
         if (!node) return;
         switch (node->VpiType()) {
             case vpiAssignment: case vpiAssignStmt:
+                if (auto a = any_cast<const assignment*>(node)) note_new(a);
                 if (auto a = any_cast<const assignment*>(node))
                     if (const any* lhs = a->Lhs())
                         note_lhs(lhs);
@@ -5882,6 +5903,57 @@ void UhdmImporter::import_module(const module_inst* uhdm_module) {
                                 }
                             }
                         }
+                    } else if (const UHDM::array_typespec* dyn_ats = [&]() -> const UHDM::array_typespec* {
+                                   // A DYNAMIC array (`int d[]`, `T d` with
+                                   // `typedef int T[]`): its one dimension is
+                                   // `[0:unsized]` on the typespec.
+                                   if (array_var->Ranges() && !array_var->Ranges()->empty()) return nullptr;
+                                   auto rts = array_var->Typespec();
+                                   auto ts = rts ? rts->Actual_typespec() : nullptr;
+                                   if (!ts || ts->UhdmType() != uhdmarray_typespec) return nullptr;
+                                   auto at = any_cast<const UHDM::array_typespec*>(ts);
+                                   if (array_var->VpiArrayType() == vpiDynamicArray ||
+                                       array_var->VpiArrayType() == vpiQueueArray)
+                                       return at;
+                                   if (!at->Ranges() || at->Ranges()->size() != 1) return nullptr;
+                                   auto rx = (*at->Ranges())[0]->Right_expr();
+                                   if (!rx || rx->UhdmType() != uhdmconstant) return nullptr;
+                                   std::string v(any_cast<const constant*>(rx)->VpiValue());
+                                   return (v == "STRING:unsized" || v == "STRING:$") ? at : nullptr;
+                               }()) {
+                        // Per-element wires `\d[i]`, sized by the largest
+                        // constant `new[N]` (see dyn_array_new_size): the
+                        // whole-array fallback below made it ONE 1-bit wire
+                        // (`int ia[]; ia = new[3];` read ia[2] out of range).
+                        int n = dyn_array_new_size.count(array_name) ? dyn_array_new_size[array_name] : 0;
+                        int ew = 0;
+                        bool es = false;
+                        if (dyn_ats->Elem_typespec() && dyn_ats->Elem_typespec()->Actual_typespec()) {
+                            auto et = dyn_ats->Elem_typespec()->Actual_typespec();
+                            ew = get_width_from_typespec(et, uhdm_module);
+                            if (et->UhdmType() == uhdmint_typespec || et->UhdmType() == uhdmbyte_typespec ||
+                                et->UhdmType() == uhdmshort_int_typespec || et->UhdmType() == uhdmlong_int_typespec)
+                                es = true;
+                            if (et->UhdmType() == uhdmlogic_typespec && any_cast<const logic_typespec*>(et)->VpiSigned())
+                                es = true;
+                        }
+                        if (ew <= 0 && array_var->Variables() && !array_var->Variables()->empty()) {
+                            auto v0 = array_var->Variables()->at(0);
+                            ew = get_width(v0, uhdm_module);
+                            if (auto vv = dynamic_cast<const UHDM::variables*>(v0)) es = es || vv->VpiSigned();
+                        }
+                        if (ew <= 0) ew = 1;
+                        for (int i = 0; i < n; i++) {
+                            std::string ename = array_name + "[" + std::to_string(i) + "]";
+                            RTLIL::IdString eid = uid(RTLIL::escape_id(ename));
+                            if (module->wire(eid)) continue;
+                            RTLIL::Wire* w = module->addWire(eid, ew);
+                            w->is_signed = es;
+                            add_src_attribute(w->attributes, array_var);
+                            name_map[ename] = w;
+                        }
+                        uhdm_trace("UHDM: Dynamic array_var '%s': %d element wires of %d bits\n",
+                            array_name.c_str(), n, ew);
                     } else {
                         // No direct Ranges() on the array_var, OR multi-dim
                         // unpacked.  Fall back to the var's typespec for the
