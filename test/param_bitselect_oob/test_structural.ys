@@ -1,0 +1,7 @@
+read_uhdm slpp_all/surelog.uhdm
+hierarchy -check -top param_bitselect_oob
+proc
+opt_clean
+# The read itself used to abort.  The in-range bit keeps its value and the
+# 2-state out-of-range bit reads 0; the initial block sees PI[40] as 0.
+sat -verify -prove o_in 1'1 -prove o_2state 1'0 -prove o_init 1'1
