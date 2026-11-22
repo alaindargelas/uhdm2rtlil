@@ -11476,6 +11476,29 @@ void UhdmImporter::import_tf_call_comb(const UHDM::tf_call* tc,
         log_warning("Tf-call has no callee definition\n");
         return;
     }
+    // Bound the NESTING of inlined task / void-function calls.  A recursion
+    // whose termination depends on a RUNTIME value -- ivtest br_gh418:
+    // `func1` calls `func2` calls `func1` until `count` reaches 10 -- was
+    // inlined without limit, through
+    //   import_tf_call_comb -> inline_task_body_comb -> import_if_stmt_comb
+    //     -> import_statement_comb -> import_tf_call_comb
+    // and read_uhdm died of a stack overflow (segfault, 75000 frames deep).
+    // Synthesis cannot unroll such a recursion; past the limit the call is
+    // dropped with a warning, like evaluate_function_call's expression-level
+    // recursion limit.
+    static int tf_inline_depth = 0;
+    constexpr int kMaxTfInlineDepth = 64;
+    if (tf_inline_depth >= kMaxTfInlineDepth) {
+        log_warning("Call to '%s' nested more than %d levels deep (recursion with a "
+                    "runtime bound?): not inlined further\n",
+                    std::string(task_def->VpiName()).c_str(), kMaxTfInlineDepth);
+        return;
+    }
+    struct DepthGuard {
+        int& d;
+        explicit DepthGuard(int& x) : d(x) { ++d; }
+        ~DepthGuard() { --d; }
+    } depth_guard(tf_inline_depth);
     // Where the call's visible effects (the output write-backs) go: the
     // enclosing case arm when the statement sits in one, else the root.
     auto out_actions = [&]() -> std::vector<RTLIL::SigSig>& {
