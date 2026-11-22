@@ -2041,6 +2041,22 @@ static RTLIL::Module* connect_target_module(RTLIL::Module* fallback,
     return (owner && owner != fallback) ? owner : fallback;
 }
 
+// True when a net-declaration-assignment LHS is a real NET (wire, tri, wand,
+// wor, ...), whose initializer is a continuous assignment.  `reg x = v;`
+// reaches import_continuous_assign as a logic_net too, with vpiNetType vpiReg
+// (and trireg keeps its value like a variable), so the net TYPE is the test.
+static bool is_resolved_net_lhs(const UHDM::expr* lhs) {
+    if (!lhs || lhs->UhdmType() != UHDM::uhdmlogic_net) return false;
+    switch (static_cast<const UHDM::logic_net*>(lhs)->VpiNetType()) {
+        case vpiWire: case vpiWand: case vpiWor: case vpiTri: case vpiTri0:
+        case vpiTri1: case vpiTriAnd: case vpiTriOr: case vpiSupply0:
+        case vpiSupply1: case vpiUwire:
+            return true;
+        default:
+            return false;
+    }
+}
+
 void UhdmImporter::import_continuous_assign(const cont_assign* uhdm_assign) {
     if (mode_debug)
         log("  Importing continuous assignment\n");
@@ -2402,6 +2418,21 @@ void UhdmImporter::import_continuous_assign(const cont_assign* uhdm_assign) {
             if (mode_debug)
                 log("  Created constant driver for gen-scope net declaration '%s'\n",
                     lhs.is_wire() ? lhs.as_wire()->name.str().c_str() : "?");
+        } else if (is_constant && is_resolved_net_lhs(lhs_expr)) {
+            // A NET's declaration initializer is a CONTINUOUS assignment
+            // (IEEE 1800-2017 10.3.1: `wire w = expr;` is shorthand for
+            // `wire w; assign w = expr;`), not an initial value.  Treating
+            // `wire [7:0] a = 8'b1101x001;` like `reg a = ...` stamped an
+            // \init on the wire, and with the source's own
+            // `assign a = 8'b1101x001;` beside it yosys's `check` aborted:
+            // "Conflicting init values for signal 1'0 (\b [1] = 1'0 != 1'x)"
+            // (every sv-tests equality_operator_sim_N template test, and
+            // ivtest br_gh567 / br_gh568 / pr1990029).  read_slang and
+            // read_verilog both lower it to a plain connect.
+            RTLIL::Module* tgt = connect_target_module(module, lhs);
+            tgt->connect(lhs, rhs);
+            if (mode_debug)
+                log("  Constant net declaration assignment -> continuous driver\n");
         } else if (is_constant) {
             // For reg/logic net declaration initializers (e.g. `reg x = -1`),
             // create a `sync always` process — exactly as the Verilog frontend
