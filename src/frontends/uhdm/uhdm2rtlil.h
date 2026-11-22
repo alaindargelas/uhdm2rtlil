@@ -791,6 +791,12 @@ struct UhdmImporter {
     // undriven net the RTL never assigns (the CLAUDE.md source-class table)
     // from a driver the reader dropped.
     std::set<std::string> src_lhs_names;
+    // Largest CONSTANT size each dynamic array is allocated with in the
+    // module (`a = new[N]`, `a = new[N](src)`), collected alongside
+    // src_lhs_names.  A dynamic array has no static size (its range is
+    // `[0:unsized]`); the reader models it as a fixed array of this many
+    // elements.  Absent: never allocated with a constant size.
+    std::map<std::string, int> dyn_array_new_size;
 
     // Element widths for function-local unpacked array_var instances.
     // Key: variable name (within the function evaluation scope).  Value: width
@@ -1694,6 +1700,8 @@ struct UhdmImporter {
     
     // Side-effect helpers for assignment expressions and inc/dec
     void emit_comb_assign(RTLIL::SigSpec lhs, RTLIL::SigSpec rhs, RTLIL::Process* proc);
+    bool dyn_new_element_assigns(const UHDM::assignment* a,
+                                 std::vector<std::pair<RTLIL::SigSpec, RTLIL::SigSpec>>& out);
     RTLIL::SigSpec map_to_temp_wire(RTLIL::SigSpec sig);
     void fold_whole_array_writes_onto_elements(std::vector<AssignedSignal>& assigned_signals);
     // `\arr[k]` per-element alias wire of a flat unpacked array `\arr` (both

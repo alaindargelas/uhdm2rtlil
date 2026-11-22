@@ -5317,6 +5317,18 @@ static bool initial_is_compile_time(const any* stmt) {
 // block is a set of init values, which the sync path emits as `init`
 // attributes plus one init-only driver per wire; the comb path would make a
 // continuous driver of each slice.
+// `new[N]` or `new[N]('{...constant...})` with a constant N: a dynamic
+// array allocation whose element values are known at elaboration.
+static bool is_const_dyn_new(const any* rhs) {
+    if (!rhs || rhs->UhdmType() != uhdmmethod_func_call || rhs->VpiName() != "new")
+        return false;
+    auto mc = any_cast<const method_func_call*>(rhs);
+    if (!mc->Tf_call_args() || mc->Tf_call_args()->empty()) return false;
+    for (auto arg : *mc->Tf_call_args())
+        if (!expr_is_compile_time(arg)) return false;
+    return true;
+}
+
 static bool initial_is_const_slice_writes(const any* stmt) {
     if (!stmt) return false;
     switch (stmt->VpiType()) {
@@ -5336,6 +5348,8 @@ static bool initial_is_const_slice_writes(const any* stmt) {
         }
         case vpiAssignment: {
             auto a = any_cast<const assignment*>(stmt);
+            if (a->Lhs() && a->Lhs()->VpiType() == vpiRefObj && is_const_dyn_new(a->Rhs()))
+                return true;
             if (!a->Lhs() || !expr_is_compile_time(a->Rhs())) return false;
             switch (a->Lhs()->VpiType()) {
                 case vpiRefObj:
@@ -6530,6 +6544,16 @@ void UhdmImporter::import_initial_comb(const process_stmt* uhdm_process, RTLIL::
 
     for (const auto& sig : assigned_signals) {
         RTLIL::SigSpec lhs_spec = import_expression(sig.lhs_expr);
+        // A whole-array write to an unpacked array materialised as element
+        // wires (`a = new[3]`, `a = '{...}`) is expanded by
+        // extract_assigned_signals into one signal PER ELEMENT that all carry
+        // the whole-array LHS.  Each needs its own element-wide temp: sized
+        // from the whole array, the temps overlapped and the element writes
+        // after the whole write landed in the wrong bits (br_gh460).
+        if (sig.lhs_expr && sig.lhs_expr->VpiType() == vpiRefObj &&
+            std::string(sig.lhs_expr->VpiName()) != sig.name)
+            if (RTLIL::Wire* ew = module->wire(uid(RTLIL::escape_id(sig.name))))
+                lhs_spec = RTLIL::SigSpec(ew);
         lhs_specs[sig.lhs_expr] = lhs_spec;
 
         RTLIL::Wire* temp_wire = nullptr;
@@ -14663,6 +14687,19 @@ void UhdmImporter::import_assignment_sync(const assignment* uhdm_assign, RTLIL::
     uhdm_trace("            import_assignment_sync called\n");
     log_flush();
 
+    // `darr = new[N]` / `darr = new[N](src)` in an initial block: one init
+    // value per element (dyn_new_element_assigns).
+    if (in_initial_block) {
+        std::vector<std::pair<RTLIL::SigSpec, RTLIL::SigSpec>> elems;
+        if (dyn_new_element_assigns(uhdm_assign, elems)) {
+            for (auto& e : elems) {
+                pending_sync_assignments[e.first] = e.second;
+                note_pending_sync(e.first);
+            }
+            return;
+        }
+    }
+
     // Detect a dynamic indexed-part-select LHS (e.g. `dout[ctrl*sel +: 16] <= din`).
     // For non-constant offsets we must emit a read-modify-write on the *full*
     // base wire, because the destination bits are not known at synthesis time.
@@ -19236,6 +19273,104 @@ RTLIL::SigSpec UhdmImporter::memwr_size_addr(RTLIL::SigSpec& addr, int aw) {
     return in_range;
 }
 
+// `darr = new[N]` / `darr = new[N](src)` (LRM 7.5.1) on a dynamic array the
+// reader models as fixed per-element wires `\darr[i]` (see the dynamic bound
+// in import_constant): element i takes src[i] while i is within src -- an
+// array whose elements are wires `\src[i]`, or an assignment pattern -- and
+// the element type's default otherwise (X for 4-state, 0 for 2-state).
+// Imported as an expression the call was "unsupported" and its X clobbered
+// the elements written after it (br_gh460 read a[1] as X after a[1] = 1).
+bool UhdmImporter::dyn_new_element_assigns(
+        const assignment* a,
+        std::vector<std::pair<RTLIL::SigSpec, RTLIL::SigSpec>>& out) {
+    if (!a || !a->Lhs() || !a->Rhs() || a->Rhs()->UhdmType() != uhdmmethod_func_call)
+        return false;
+    auto mc = any_cast<const method_func_call*>(a->Rhs());
+    if (!mc || mc->VpiName() != "new" || !mc->Tf_call_args() || mc->Tf_call_args()->empty())
+        return false;
+    auto nc = dynamic_cast<const constant*>((*mc->Tf_call_args())[0]);
+    if (!nc) return false;
+    RTLIL::Const nv = extract_const_from_value(std::string(nc->VpiValue()));
+    if (nv.size() == 0 || !nv.is_fully_def()) return false;
+    int n = nv.as_int();
+    if (n < 0 || n > (1 << 20)) return false;
+    std::string base(a->Lhs()->VpiName());
+    if (base.empty()) return false;
+    auto elem_wire = [&](const std::string& b, int i) -> RTLIL::Wire* {
+        return module->wire(uid(RTLIL::escape_id(b + "[" + std::to_string(i) + "]")));
+    };
+    // Default value: 0 for a 2-state element, X otherwise.
+    bool two_state = false;
+    auto is_2state_ts = [](const UHDM::typespec* ts) {
+        if (!ts) return false;
+        switch (ts->UhdmType()) {
+            case uhdmbit_typespec: case uhdmint_typespec: case uhdmbyte_typespec:
+            case uhdmshort_int_typespec: case uhdmlong_int_typespec:
+                return true;
+            default: return false;
+        }
+    };
+    if (current_instance) {
+        auto check = [&](const UHDM::any* v) {
+            if (!v || v->VpiName() != base) return;
+            const UHDM::typespec* ts = nullptr;
+            if (auto e = dynamic_cast<const expr*>(v))
+                if (e->Typespec()) ts = e->Typespec()->Actual_typespec();
+            if (ts && ts->UhdmType() == uhdmarray_typespec) {
+                auto at = any_cast<const array_typespec*>(ts);
+                ts = at->Elem_typespec() ? at->Elem_typespec()->Actual_typespec() : nullptr;
+            }
+            if (auto av = dynamic_cast<const array_var*>(v))
+                if (av->Variables() && !av->Variables()->empty())
+                    if (auto e0 = dynamic_cast<const expr*>((*av->Variables())[0]))
+                        if (e0->Typespec()) ts = e0->Typespec()->Actual_typespec();
+            if (is_2state_ts(ts)) two_state = true;
+            if (v->UhdmType() == uhdmbit_var || v->UhdmType() == uhdmint_var ||
+                v->UhdmType() == uhdmbyte_var)
+                two_state = true;
+        };
+        if (auto vars = current_instance->Variables()) for (auto v : *vars) check(v);
+        if (auto ans = current_instance->Array_nets()) for (auto v : *ans) check(v);
+    }
+    const UHDM::any* src = mc->Tf_call_args()->size() > 1 ? (*mc->Tf_call_args())[1] : nullptr;
+    const UHDM::VectorOfany* pat = nullptr;
+    std::string src_name;
+    if (src && src->UhdmType() == uhdmoperation) {
+        auto op = any_cast<const operation*>(src);
+        if (op->VpiOpType() == vpiAssignmentPatternOp) pat = op->Operands();
+        else return false;
+    } else if (src) {
+        src_name = std::string(src->VpiName());
+        if (src_name.empty()) return false;
+    }
+    std::vector<std::pair<RTLIL::SigSpec, RTLIL::SigSpec>> res;
+    for (int i = 0; i < n; i++) {
+        RTLIL::Wire* w = elem_wire(base, i);
+        if (!w) return false;
+        RTLIL::SigSpec v;
+        if (pat && i < (int)pat->size()) {
+            if (auto pe = dynamic_cast<const expr*>((*pat)[i])) v = import_expression(pe);
+        } else if (!src_name.empty()) {
+            if (RTLIL::Wire* sw = elem_wire(src_name, i)) {
+                // The source element's value SO FAR in this block: the sync
+                // (init) path keeps it in pending_sync_assignments, the comb
+                // path in current_comb_values.
+                auto pit = pending_sync_assignments.find(RTLIL::SigSpec(sw));
+                auto it = current_comb_values.find(src_name + "[" + std::to_string(i) + "]");
+                v = in_initial_block && pit != pending_sync_assignments.end() ? pit->second
+                    : it != current_comb_values.end() ? it->second : RTLIL::SigSpec(sw);
+            }
+        }
+        if (v.empty())
+            v = RTLIL::SigSpec(two_state ? RTLIL::State::S0 : RTLIL::State::Sx, w->width);
+        if (v.size() < w->width) v.extend_u0(w->width);
+        else if (v.size() > w->width) v = v.extract(0, w->width);
+        res.emplace_back(RTLIL::SigSpec(w), v);
+    }
+    out = std::move(res);
+    return true;
+}
+
 void UhdmImporter::import_assignment_comb(const assignment* uhdm_assign, RTLIL::Process* proc) {
     NbInflightGuard nb_guard(this, uhdm_assign);
     struct FfBlockingFlagGuard {
@@ -19264,6 +19399,15 @@ void UhdmImporter::import_assignment_comb(const assignment* uhdm_assign, RTLIL::
         else if (rhs_s.size() > lhs_s.size()) rhs_s = rhs_s.extract(0, lhs_s.size());
         return create_compound_op_cell(ot, cur, rhs_s, uhdm_assign);
     };
+
+    // `darr = new[N]` / `darr = new[N](src)`: one write per element.
+    {
+        std::vector<std::pair<RTLIL::SigSpec, RTLIL::SigSpec>> elems;
+        if (dyn_new_element_assigns(uhdm_assign, elems)) {
+            for (auto& e : elems) emit_comb_assign(e.first, e.second, proc);
+            return;
+        }
+    }
 
     // `base[offset +: width] = rhs` with dynamic `offset` — no RTLIL LHS form
     // captures a runtime-indexed slice, so synthesise the mask/shift/or write
