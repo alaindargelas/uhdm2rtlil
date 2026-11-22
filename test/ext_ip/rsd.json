@@ -35,5 +35,6 @@
  "want": "proven",
  "harness_srcs": [
   "stubs/rsd_config.sv"
- ]
+ ],
+ "dump_limit_mb": 0
 }
