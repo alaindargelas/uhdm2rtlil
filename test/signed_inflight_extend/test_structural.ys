@@ -1,0 +1,6 @@
+read_uhdm slpp_all/surelog.uhdm
+hierarchy -check -top signed_inflight_extend
+proc
+opt_clean
+check -assert
+sat -verify -set a 4'b1000 -prove os 10'h3ff -prove oa 10'h3f8 -prove ou 10'h1ff
