@@ -7422,8 +7422,8 @@ RTLIL::SigSpec UhdmImporter::import_expression(const expr* uhdm_expr, const std:
                             return RTLIL::SigSpec(RTLIL::Const((long long)rounded, w));
                         }
                     }
-                    log_warning("Unhandled system function call: %s with %d arguments\n",
-                               func_name.c_str(), (int)args.size());
+                    warn_once(stringf("Unhandled system function call: %s with %d arguments\n",
+                               func_name.c_str(), (int)args.size()));
                     // Return first argument if available, otherwise empty
                     return args.empty() ? RTLIL::SigSpec() : args[0];
                 }

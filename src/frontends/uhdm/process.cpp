@@ -6305,6 +6305,14 @@ void UhdmImporter::import_initial(const process_stmt* uhdm_process, RTLIL::Proce
         }
     }
 
+    interp_steps_ = 0;
+    unroll_steps_ = 0;
+    interp_budget_exceeded_ = false;
+    // Snapshot what the block may add OUTSIDE its process (cells and
+    // connections from unrolled loops) so an abandoned block leaves nothing.
+    pool<RTLIL::Cell*> cells_before;
+    for (auto c : module->cells()) cells_before.insert(c);
+    size_t conns_before = module->connections().size();
     if (stmt_has_timing_in_loop(uhdm_process->Stmt(), false)) {
         log_warning("%s: initial block repeats a timing control (#delay / @event "
                     "/ wait) in a loop: a simulation testbench, not synthesizable; "
@@ -6375,6 +6383,29 @@ void UhdmImporter::import_initial(const process_stmt* uhdm_process, RTLIL::Proce
         import_initial_comb(uhdm_process, yosys_proc);
     } else {
         import_initial_sync(uhdm_process, yosys_proc);
+    }
+
+    if (interp_budget_exceeded_) {
+        // A partial result would be wrong values: drop the whole block.
+        log_warning("%s: initial block exceeds the compile-time evaluation budget "
+                    "(%lld interpreted / %lld unrolled statements); ignored.\n",
+                    get_src_attribute(uhdm_process).c_str(), (long long)kInterpStepBudget,
+                    (long long)kUnrollStepBudget);
+        std::vector<RTLIL::Cell*> added;
+        for (auto c : module->cells())
+            if (!cells_before.count(c)) added.push_back(c);
+        for (auto c : added) module->remove(c);
+        if (module->connections().size() > conns_before) {
+            auto conns = module->connections();
+            conns.resize(conns_before);
+            module->new_connections(conns);
+        }
+        for (auto sync : yosys_proc->syncs) delete sync;
+        yosys_proc->syncs.clear();
+        for (auto sw : yosys_proc->root_case.switches) delete sw;
+        yosys_proc->root_case.switches.clear();
+        yosys_proc->root_case.actions.clear();
+        interp_budget_exceeded_ = false;
     }
 
     // Reset the flag when done
@@ -7878,6 +7909,7 @@ void UhdmImporter::import_statement_with_loop_vars(const any* uhdm_stmt, RTLIL::
 
 // Import statement for synchronous context
 void UhdmImporter::import_statement_sync(const any* uhdm_stmt, RTLIL::SyncRule* sync, bool is_reset) {
+    if (in_initial_block && initial_unroll_over_budget()) return;
     uhdm_trace("        import_statement_sync called\n");
     log_flush();
     
@@ -10342,6 +10374,7 @@ void UhdmImporter::unroll_foreach(const UHDM::foreach_stmt* fe,
 
 // Import statement for combinational context
 void UhdmImporter::import_statement_comb(const any* uhdm_stmt, RTLIL::Process* proc) {
+    if (in_initial_block && initial_unroll_over_budget()) return;
     if (!uhdm_stmt)
         return;
     
@@ -22291,6 +22324,7 @@ void UhdmImporter::import_case_stmt_comb(const case_stmt* uhdm_case, RTLIL::Proc
 
 // Import statement for case rule context
 void UhdmImporter::import_statement_comb(const any* uhdm_stmt, RTLIL::CaseRule* case_rule) {
+    if (in_initial_block && initial_unroll_over_budget()) return;
 
     if (!uhdm_stmt) {
         if (mode_debug)

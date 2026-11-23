@@ -797,6 +797,30 @@ struct UhdmImporter {
     // `[0:unsized]`); the reader models it as a fixed array of this many
     // elements.  Absent: never allocated with a constant size.
     std::map<std::string, int> dyn_array_new_size;
+    // Initial-block interpreter statement budget.  A nested compile-time
+    // loop is capped per loop (100k) but not in total: Icarus ivtest
+    // pow_reg_signed interpreted 65535 x 127 iterations (its `disable` exit
+    // needs real arithmetic the interpreter lacks) for 50+ s.  Past the
+    // budget the block is abandoned and ignored with a warning.
+    static constexpr int64_t kInterpStepBudget = 4000000;
+    int64_t interp_steps_ = 0;
+    bool interp_budget_exceeded_ = false;
+    // The sync / comb initial paths UNROLL loops into netlist cells, which
+    // costs far more per statement (~7 KB): a 3000 x 3000 `acc = acc + 1`
+    // block was OOM-killed.  Same discard rule, a smaller budget.
+    static constexpr int64_t kUnrollStepBudget = 50000;
+    int64_t unroll_steps_ = 0;
+    bool initial_unroll_over_budget() {
+        if (interp_budget_exceeded_) return true;
+        if (++unroll_steps_ > kUnrollStepBudget) interp_budget_exceeded_ = true;
+        return interp_budget_exceeded_;
+    }
+    // A warning repeated per interpreted statement / loop iteration is
+    // reported once per module.
+    std::set<std::string> warned_once_;
+    void warn_once(const std::string& msg) {
+        if (warned_once_.insert(msg).second) log_warning("%s", msg.c_str());
+    }
 
     // Element widths for function-local unpacked array_var instances.
     // Key: variable name (within the function evaluation scope).  Value: width

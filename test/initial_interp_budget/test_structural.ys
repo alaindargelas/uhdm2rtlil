@@ -1,0 +1,11 @@
+read_sv -nonote -noinfo -nowarning dut.sv
+hierarchy -check -top initial_interp_budget
+proc
+opt_clean
+# The unfinished block is dropped ENTIRELY: acc gets no (partial) value and
+# nothing is left behind by it.
+select -assert-count 0 w:acc a:init %i
+select -assert-count 0 w:i a:init %i
+select -assert-count 0 t:$add
+# The small block still initializes its variable.
+sat -verify -prove k 8'd42
