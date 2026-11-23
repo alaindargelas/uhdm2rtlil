@@ -1,0 +1,6 @@
+# The read must FAIL: Surelog reports the illegal construct (its diagnostic
+# is printed by Surelog itself; see dut.sv) and read_sv stops on it.  The
+# exact error count pins it to this construct; without the check the read
+# succeeds and this script fails.
+logger -expect error "Surelog reported 0 fatal, 0 syntax and 1 other error" 1
+read_sv -nonote -noinfo -nowarning dut.sv
