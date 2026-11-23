@@ -1,0 +1,6 @@
+# The read must succeed; the allocated array keeps its element value.
+read_sv -nonote -noinfo -nowarning dut.sv
+hierarchy -check -top dyn_array_unallocated
+proc
+opt_clean
+sat -verify -prove a1 8'h5a

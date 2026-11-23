@@ -5910,6 +5910,14 @@ void UhdmImporter::import_module(const module_inst* uhdm_module) {
                                    // `typedef int T[]`): its one dimension is
                                    // `[0:unsized]` on the typespec.
                                    if (array_var->Ranges() && !array_var->Ranges()->empty()) return nullptr;
+                                   // Only an array ALLOCATED with a constant
+                                   // `new[N]` has a known element count; one
+                                   // that never is (`real d[]; x = d[1];`, a
+                                   // queue filled by push_back) keeps the
+                                   // whole-array fallback below -- zero
+                                   // element wires made every `d[i]` read a
+                                   // "Could not find wire" error.
+                                   if (!dyn_array_new_size.count(array_name)) return nullptr;
                                    auto rts = array_var->Typespec();
                                    auto ts = rts ? rts->Actual_typespec() : nullptr;
                                    if (!ts || ts->UhdmType() != uhdmarray_typespec) return nullptr;
