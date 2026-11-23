@@ -24304,6 +24304,7 @@ void UhdmImporter::process_reset_block_for_memory(const UHDM::any* reset_stmt, R
 
 // Import initial block using interpreter approach (handles block-local variable declarations)
 void UhdmImporter::import_initial_interpreted(const process_stmt* uhdm_process, RTLIL::Process* yosys_proc) {
+    interp_ce_.reset();   // the netlist changed since the last block
     uhdm_trace("    Importing initial block (interpreter approach - has block-local variables or for-loops)\n");
 
     // Create the "sync always" rule (empty, required by proc pass)
@@ -24386,7 +24387,52 @@ void UhdmImporter::import_initial_interpreted(const process_stmt* uhdm_process, 
                                  RTLIL::SigSpec(RTLIL::Const(vals[idx] & 1, 1))});
         }
     }
+    // The block runs AFTER the declaration initializers (`reg failed = 0;`),
+    // so what it writes supersedes them: fold a bit write into the existing
+    // \init, and drop the \init of a wire it writes whole.  Keeping both was
+    // "Conflicting initialization values" in proc_init (br_gh567, pr1990029).
+    // A variable whose initializer became a `sync always` constant driver
+    // (decl_init_sta_) holds the block's final value from then on: rewrite
+    // that driver and its \init instead of adding an init action beside it.
+    auto rewrite_decl_driver = [&](RTLIL::Wire* w, int offset, const RTLIL::Const& v) -> bool {
+        auto dit = decl_init_sta_.find(w);
+        if (dit == decl_init_sta_.end()) return false;
+        RTLIL::Const cur = w->attributes.count(ID::init) ? w->attributes.at(ID::init)
+                                                       : RTLIL::Const(RTLIL::State::Sx, w->width);
+        if (cur.size() < w->width) cur.resize(w->width, RTLIL::State::Sx);
+        for (int i = 0; i < v.size() && offset + i < w->width; i++) cur.set(offset + i, v[i]);
+        w->attributes[ID::init] = cur;
+        for (auto& act : dit->second->actions)
+            if (act.first == RTLIL::SigSpec(w)) act.second = RTLIL::SigSpec(cur);
+        return true;
+    };
+    std::vector<std::pair<RTLIL::SigSpec, RTLIL::SigSpec>> bit_actions;
     for (auto& bi : bit_inits) {
+        RTLIL::SigChunk ch = bi.first.as_chunk();
+        if (!wire_to_value.count(ch.wire) &&
+            rewrite_decl_driver(ch.wire, ch.offset, bi.second.as_const()))
+            continue;
+        auto ia = ch.wire->attributes.find(ID::init);
+        if (ia != ch.wire->attributes.end() && !wire_to_value.count(ch.wire)) {
+            RTLIL::Const iv = ia->second;
+            if (iv.size() < ch.wire->width) iv.resize(ch.wire->width, RTLIL::State::Sx);
+            iv.set(ch.offset, bi.second.as_const()[0]);
+            ia->second = iv;
+            continue;
+        }
+        bit_actions.push_back(bi);
+    }
+    for (auto it = wire_to_value.begin(); it != wire_to_value.end();) {
+        RTLIL::Wire* w = it->first;
+        if (rewrite_decl_driver(w, 0, RTLIL::Const((int32_t)it->second.second, w->width))) {
+            interpreter_init_values[w] = w->attributes.at(ID::init);
+            it = wire_to_value.erase(it);
+            continue;
+        }
+        w->attributes.erase(ID::init);
+        ++it;
+    }
+    for (auto& bi : bit_actions) {
         sync_init->actions.push_back(RTLIL::SigSig(bi.first, bi.second));
         if (mode_debug)
             uhdm_trace("      Initial bit assignment: %s = %s\n",

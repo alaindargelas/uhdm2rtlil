@@ -37,6 +37,7 @@
 #include "kernel/yosys.h"
 #include "kernel/sigtools.h"
 #include "kernel/celltypes.h"
+#include "kernel/consteval.h"
 #include "kernel/log.h"
 
 YOSYS_NAMESPACE_BEGIN
@@ -1256,6 +1257,20 @@ struct UhdmImporter {
     std::vector<std::pair<RTLIL::IdString, RTLIL::IdString>> two_state_tie_candidates_;
     // Elements (bits of a vector) the initial-block interpreter wrote, per name.
     std::map<std::string, std::set<int64_t>> interp_written_elems_;
+    // An interpreter read of a name that is not one of the block's variables
+    // is a MODULE signal: its declaration initializer (`reg pass = 1'b1`,
+    // the `\init` set before the block runs) or, for a net, its constant
+    // driver (`assign val[i] = i` in a generate loop), evaluated with a
+    // ConstEval over the netlist built so far.  Both used to read 0: br_gh567
+    // compared every `val[j]` against 0 and set `failed`, pr1990029 read its
+    // `pass = 1` flag as 0.
+    std::unique_ptr<ConstEval> interp_ce_;
+    // The `sync always` constant driver import_continuous_assign gives a
+    // variable's declaration initializer (`reg x = v;` with no other driver).
+    // An interpreted initial block that writes x supersedes the initializer,
+    // so it rewrites this driver to the block's final value.
+    std::map<RTLIL::Wire*, RTLIL::SyncRule*> decl_init_sta_;
+    bool interp_module_value(const std::string& name, int64_t index, int64_t& out);
     void import_symbolic_loop_comb(const UHDM::any* cond_expr, const UHDM::any* body,
         const UHDM::any* step, RTLIL::CaseRule* case_rule, const UHDM::any* src, int bound);
     void collapse_composite_async_condition(RTLIL::Process* proc,

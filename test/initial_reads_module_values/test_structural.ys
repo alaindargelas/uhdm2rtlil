@@ -1,0 +1,5 @@
+read_sv -nonote -noinfo -nowarning dut.sv
+hierarchy -check -top initial_reads_module_values
+proc
+opt_clean
+sat -verify -prove f 0 -prove y 8'd13 -prove z 4'b0100

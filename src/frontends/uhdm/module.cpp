@@ -2452,6 +2452,7 @@ void UhdmImporter::import_continuous_assign(const cont_assign* uhdm_assign) {
                 sync_always->type = RTLIL::SyncType::STa;
                 sync_always->actions.push_back(RTLIL::SigSig(lhs, rhs));
                 proc->syncs.push_back(sync_always);
+                if (lhs.is_wire()) decl_init_sta_[lhs.as_wire()] = sync_always;
                 if (mode_debug)
                     log("  Created sync-always process for module-level net declaration '%s'\n",
                         lhs.is_wire() ? lhs.as_wire()->name.str().c_str() : "?");
