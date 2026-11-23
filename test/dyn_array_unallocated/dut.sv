@@ -3,8 +3,9 @@
 // sized by their `new[N]`, such an array got ZERO element wires and every
 // read `d[i]` aborted the read with "Could not find wire 'd' for bit select"
 // (Icarus ivtest sv_darray_oob_real/string, sv_queue1, sv_queue_oob_*).  It
-// keeps the whole-array fallback; an allocated one is unaffected.
-module dyn_array_unallocated(output logic o, output logic [7:0] a1);
+// keeps the whole-array fallback; an allocated one is unaffected.  The gate
+// is that the read succeeds and the allocated array keeps its value.
+module dyn_array_unallocated(output logic [7:0] a1);
   real d[];
   int q[$];
   reg [7:0] a[];
@@ -15,6 +16,9 @@ module dyn_array_unallocated(output logic o, output logic [7:0] a1);
     a = new[2];
     a[1] = 8'h5a;
   end
-  assign o = (q[0] == 5);
+  // q and x are read but not exposed: a queue grown by push_back has no
+  // netlist model, so only the allocated array is observable.
+  logic qz;
+  assign qz = (q[0] == 5);
   assign a1 = a[1];
 endmodule
