@@ -1,0 +1,6 @@
+# The read must FAIL: Surelog reports the three illegal sizes (its
+# diagnostics are printed by Surelog itself; see dut.sv) and read_sv stops on
+# them.  The exact error count pins it to these constructs; without the check
+# the read succeeds and this script fails.
+logger -expect error "Surelog reported 0 fatal, 0 syntax and 3 other error" 1
+read_sv -nonote -noinfo -nowarning dut.sv
