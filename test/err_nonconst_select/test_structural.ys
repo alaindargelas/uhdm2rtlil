@@ -1,0 +1,7 @@
+# The read must FAIL: Surelog reports UH0734 on the three ILLEGAL selects in
+# dut.sv -- a variable index in a continuous-assignment target, and the two
+# bounds `n` of part-selects whose other bound is the constant 0 (the width
+# varies with n).  The exact count pins it to those lines: the genvar-indexed
+# targets, the parameter-bounded slice and `acc[i+1 -: 2]` must stay silent.
+logger -expect error "Surelog reported 0 fatal, 0 syntax and 3 other error" 1
+read_sv -nonote -noinfo -nowarning dut.sv

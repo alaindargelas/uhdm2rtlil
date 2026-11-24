@@ -1,0 +1,8 @@
+# The read must FAIL: Surelog reports the three ILLEGAL lines in dut.sv --
+# a range bound whose value has x bits (UH0740) and two calls with the wrong
+# number of arguments (UH0741: one argument too many, one required formal
+# left out).  The exact count pins it to those lines: the defaulted formal
+# left out, the zero-argument call and the x-valued DATA parameter must
+# stay silent.
+logger -expect error "Surelog reported 0 fatal, 0 syntax and 3 other error" 1
+read_sv -nonote -noinfo -nowarning dut.sv
