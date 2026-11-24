@@ -1,0 +1,6 @@
+# Each construct must read cleanly (no UH0737 / UH0738) AND compute its value:
+# x = 3, y = 5 gives and_of = 1, ~x = 12, x + 1 = 4, and the specparam is 5.
+read_sv -nonote -noinfo -nowarning dut.sv
+hierarchy -top unit_task_specparam_var_let
+proc; opt_clean
+sat -verify -set x 4'd3 -set y 4'd5 -prove o_let 4'd1 -prove o_task 4'd12 -prove o_var 4'd4 -prove o_spec 8'd5
