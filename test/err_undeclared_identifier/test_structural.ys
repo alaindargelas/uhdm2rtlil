@@ -1,0 +1,6 @@
+# The read must FAIL: Surelog reports the two undeclared identifiers and the
+# undefined function (UH0737 x2, UH0738; see dut.sv) and read_sv stops on
+# them.  The exact count pins it to these names -- the implicit net `imp` on
+# an assign LHS is legal and must not add a fourth.
+logger -expect error "Surelog reported 0 fatal, 0 syntax and 3 other error" 1
+read_sv -nonote -noinfo -nowarning dut.sv
