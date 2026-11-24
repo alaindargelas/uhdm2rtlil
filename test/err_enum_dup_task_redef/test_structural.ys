@@ -1,0 +1,7 @@
+# The read must FAIL: Surelog reports the two ILLEGAL lines in dut.sv -- an
+# enum with two constants of value 2 (UH0743) and a task port declared WITH
+# a data type after a variable of the same name (CP0346).  The exact count
+# pins it to those lines: distinct enum values and a variable completed by
+# an UNTYPED port must stay silent.
+logger -expect error "Surelog reported 0 fatal, 0 syntax and 2 other error" 1
+read_sv -nonote -noinfo -nowarning dut.sv

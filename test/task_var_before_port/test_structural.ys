@@ -1,0 +1,7 @@
+# The task's ports are completed by variables declared BEFORE them; the
+# values must flow through both inputs and both outputs.
+read_sv -nonote -noinfo -nowarning dut.sv
+hierarchy -top task_var_before_port
+proc; opt_clean
+sat -verify -set x 8'd200 -set y 8'd77 -prove s 8'd21 -prove d 8'd123
+sat -verify -set x 8'd5 -set y 8'd9 -prove s 8'd14 -prove d 8'd252
