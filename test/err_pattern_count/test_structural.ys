@@ -1,0 +1,8 @@
+# The read must FAIL: Surelog reports UH0742 on the three ILLEGAL positional
+# assignment patterns in dut.sv (one element short for a struct, one too many
+# for a packed array's outer dimension, one too many assigned procedurally).
+# The exact count pins it to those lines: matching patterns, named and
+# `default:` members, a replication pattern, an unpacked array, a packed array
+# of structs and an unpacked array of structs must stay silent.
+logger -expect error "Surelog reported 0 fatal, 0 syntax and 3 other error" 1
+read_sv -nonote -noinfo -nowarning dut.sv
