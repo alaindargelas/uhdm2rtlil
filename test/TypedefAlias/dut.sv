@@ -22,5 +22,5 @@ module dut (input clk, input pkg::enum_t a, output pkg::alias_t b);
    pkg::third_alias_t d;
    assign c = a;
    assign d = c;
-   assign b = d;
+   assign b = pkg::alias_t'(d);
 endmodule

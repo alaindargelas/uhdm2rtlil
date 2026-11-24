@@ -1,0 +1,8 @@
+# The read must FAIL: Surelog reports the three ILLEGAL enum assignments in
+# dut.sv (UH0739: an int, an arithmetic result and an int array element
+# assigned to an enum without a cast) and read_sv stops on them.  The exact
+# count pins it to those lines -- every legal form above them (package enum
+# constants, a parameter, casts, conditionals, .next(), a function returning
+# the enum, enum array elements, a struct member) must stay silent.
+logger -expect error "Surelog reported 0 fatal, 0 syntax and 3 other error" 1
+read_sv -nonote -noinfo -nowarning dut.sv

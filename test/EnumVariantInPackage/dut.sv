@@ -12,5 +12,5 @@ package test_package; // verilog_lint: waive package-filename
 endpackage
 
 module top(input logic i, output logic o);
-  assign o = test_package::test_true(i);
+  assign o = test_package::test_true(test_package::lc_tx_t'(i));
 endmodule
