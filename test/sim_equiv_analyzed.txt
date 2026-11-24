@@ -1250,3 +1250,13 @@ Test: initial_interp_budget
     and reads 9000000.  The test's gate is test_structural.ys (no init and
     no logic left behind for acc; `k` still initialised); `k` agrees in the
     co-sim.
+
+Test: err_enum_assign
+    By design.  The test is ILLEGAL SystemVerilog: three lines assign a
+    non-enum value to an enum without a cast (LRM 6.19.3), and its gate is
+    test_structural.ys, which expects `read_sv` to stop on exactly those
+    three UH0739 errors.  The co-sim does not go through read_sv: it builds
+    the RTL side with Verilator, which only WARNS about the illegal
+    assignments, and compares it to a netlist from the UHDM of that same
+    illegal source, so its outputs carry no meaning (read_slang rejects
+    the source too).
