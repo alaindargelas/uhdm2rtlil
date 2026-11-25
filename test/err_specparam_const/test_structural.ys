@@ -1,0 +1,6 @@
+# The read must FAIL: Surelog reports CP0348 on the two ILLEGAL uses of the
+# specparam in dut.sv (a localparam value and a generate condition).  The
+# exact count pins it to those lines: the specparam in a continuous-assign
+# delay, in a specify path and inside a generate BODY must stay silent.
+logger -expect error "Surelog reported 0 fatal, 0 syntax and 2 other error" 1
+read_sv -nonote -noinfo -nowarning dut.sv
