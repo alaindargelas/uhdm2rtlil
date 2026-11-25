@@ -1,0 +1,7 @@
+# The read must FAIL: Surelog reports UH0744 on the three ILLEGAL generate
+# block names in dut.sv (one repeats a reg's name, one repeats another
+# generate block, one is repeated by a named initial block).  The exact
+# count pins it to those: a label shared by the two branches of a
+# conditional generate and the iterations of one loop must stay silent.
+logger -expect error "Surelog reported 0 fatal, 0 syntax and 3 other error" 1
+read_sv -nonote -noinfo -nowarning dut.sv
