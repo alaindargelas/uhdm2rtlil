@@ -1,0 +1,10 @@
+# The read must FAIL: Surelog reports the six ILLEGAL lines in dut.sv -- a
+# nested loop reusing its enclosing loop's genvar (CP0349), a parameter with
+# no default and no value (EL0554), overrides of a port-list parameter after
+# `localparam` and of a generate-block parameter (EL0553), a real member of
+# a packed struct (UH0746) and a self-containing struct (UH0747).  The exact
+# count pins it to those: declared, inline and shadowing genvars, an integer
+# loop index, positional / named / defparam values, and a forward typedef
+# completed without recursion, must stay silent.
+logger -expect error "Surelog reported 0 fatal, 0 syntax and 6 other error" 1
+read_sv -nonote -noinfo -nowarning dut.sv
