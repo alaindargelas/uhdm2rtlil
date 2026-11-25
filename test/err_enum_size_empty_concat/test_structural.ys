@@ -1,0 +1,7 @@
+# The read must FAIL: Surelog reports the two ILLEGAL lines in dut.sv -- a
+# 4-bit literal in a 3-bit enum (UH0721) and a concatenation of nothing but
+# a zero-width replication (UH0745).  The exact count pins it to those:
+# matching, unsized ('b100) and implicit enum values, and a zero
+# replication beside real bits, must stay silent.
+logger -expect error "Surelog reported 0 fatal, 0 syntax and 2 other error" 1
+read_sv -nonote -noinfo -nowarning dut.sv
