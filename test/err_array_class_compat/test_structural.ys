@@ -1,0 +1,13 @@
+# The read must FAIL: Surelog reports the sixteen ILLEGAL lines in dut.sv --
+# unpacked-array assignments of another shape or of non-equivalent element
+# types (UH0736, ten times: a positional pattern with too many items, a
+# [2][2] array from a [4] one, an element to a whole array or a slice, enum
+# elements into integer ones, 2-state / signed / 16-bit / real queue and
+# dynamic-array elements, an array bound to a vector task formal), class
+# handles of an unrelated or base class (UH0756, three times) and `new`
+# into a virtual class, an int or a dynamic array (UH0757, three times).
+# The exact count pins it to those: a nested pattern, equal shapes, a typedef
+# of the same element type, `new[4]`, a derived handle, `D::new` and a
+# derived class of a virtual one must stay silent.
+logger -expect error "Surelog reported 0 fatal, 0 syntax and 16 other error" 1
+read_sv -nonote -noinfo -nowarning dut.sv
