@@ -1,0 +1,10 @@
+# The read must FAIL: Surelog reports the eight ILLEGAL lines in dut.sv --
+# a bounded queue whose bound is negative (UH0731) or x (UH0740), a defparam
+# naming no parameter (EL0555), and five procedural continuous assignment
+# targets selected with a variable index (UH0758: assign, deassign, an
+# array word, force and release).  The exact count pins it to those:
+# constant and parameter queue bounds, a defparam of an existing parameter,
+# a whole-variable assign/deassign and a constant-select force/release must
+# stay silent.
+logger -expect error "Surelog reported 0 fatal, 0 syntax and 8 other error" 1
+read_sv -nonote -noinfo -nowarning dut.sv
