@@ -1,0 +1,14 @@
+# The read must FAIL: Surelog reports the seventeen ILLEGAL lines in dut.sv --
+# enum members with a non-constant value (CP0359), an x/z value in a 2-state
+# base (CP0355, twice), no value after an x/z member (CP0356), a value the
+# base cannot hold (CP0357, three times), an invalid base type (CP0358,
+# twice), a module instantiated in a program (CP0361), a zero replication outside a concatenation (CP0362), an
+# inout port default (CP0363), a reg on an inout port or tran terminal
+# (UH0751, twice), an unassignable inout actual or assign target (UH0752,
+# twice) and a procedural write to a wire array element (UH0718).  The exact
+# count pins it to those: x in a 4-state enum, a based literal that fills an
+# int, a parameter-width base, nets on a switch, a concatenation on an inout,
+# a zero replication beside real bits and a nested generate region must stay
+# silent.
+logger -expect error "Surelog reported 0 fatal, 0 syntax and 17 other error" 1
+read_sv -nonote -noinfo -nowarning dut.sv
