@@ -1,0 +1,13 @@
+# The read must FAIL: Surelog reports the eleven ILLEGAL lines in dut.sv --
+# an export of a name the package does not import (CP0351) or that it also
+# declares (CP0352), an import / export of a name the package neither
+# declares nor exports (CP0350, twice), a name two wildcard imports provide
+# (CP0353), a wildcard-imported name declared after its use (CP0354), a
+# package-scoped name the package lacks (UH0748), a call to a package
+# parameter (CP0337), a task called as a function (UH0749), an imported
+# name reached through an instance (UH0750) and a missing struct member
+# (UH0725).  The exact count pins it to those: explicit and `*::*` exports,
+# a local declaration before any use, a wildcard import below the first use,
+# a package function call and an instance's own port must stay silent.
+logger -expect error "Surelog reported 0 fatal, 0 syntax and 11 other error" 1
+read_sv -nonote -noinfo -nowarning dut.sv
