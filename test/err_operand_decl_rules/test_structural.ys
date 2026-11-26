@@ -1,0 +1,13 @@
+# The read must FAIL: Surelog reports the fifteen ILLEGAL lines in dut.sv --
+# a real or string operand of an integral-only operator or of $signed
+# (UH0753, six times), an event passed as a value (UH0755), a void function
+# used as a value (UH0754), a static class method (CP0364), a queue, string
+# or class-typed net (CP0365, three times), an automatic variable in a
+# procedural continuous or nonblocking assignment (CP0366, twice) and an
+# attribute value naming a variable (CP0367).  The exact count pins it to
+# those: real arithmetic and comparison, string equality, $signed of an
+# integral value, a void call as a statement, an event formal, an automatic
+# class method, a 4-state net array, a static local in an assign and an
+# attribute naming a parameter must stay silent.
+logger -expect error "Surelog reported 0 fatal, 0 syntax and 15 other error" 1
+read_sv -nonote -noinfo -nowarning dut.sv
