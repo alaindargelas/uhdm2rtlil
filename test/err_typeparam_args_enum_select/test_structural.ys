@@ -1,0 +1,10 @@
+# The read must FAIL: Surelog reports the five ILLEGAL lines in dut.sv -- a
+# type parameter overridden with a value, named and positional (EL0556,
+# twice), a call with more empty arguments than formals (UH0741; an empty
+# FIRST argument used to be dropped), an int assigned to an enum class
+# property through a handle (UH0739) and a select of a name declared nowhere
+# (UH0737).  The exact count pins it to those: data-type overrides, a call
+# with an empty first slot, an enum constant into the property and a select
+# of a declared vector must stay silent.
+logger -expect error "Surelog reported 0 fatal, 0 syntax and 5 other error" 1
+read_sv -nonote -noinfo -nowarning dut.sv
