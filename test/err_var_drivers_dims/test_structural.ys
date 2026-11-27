@@ -1,0 +1,10 @@
+# The read must FAIL: Surelog reports the six ILLEGAL lines in dut.sv -- a
+# variable with two continuous assignments, or a continuous and a procedural
+# driver (UH0759, twice), an assignment pattern for a scalar bit (UH0761),
+# more indices than dimensions in a select (UH0760, twice) and more foreach
+# loop variables than dimensions (UH0760).  The exact count pins it to
+# those: a variable read by a process, a multiply-driven NET, a pattern for
+# a packed vector or an unpacked array, a bit of a memory word and a foreach
+# over an array of vectors with two loop variables must stay silent.
+logger -expect error "Surelog reported 0 fatal, 0 syntax and 6 other error" 1
+read_sv -nonote -noinfo -nowarning dut.sv
