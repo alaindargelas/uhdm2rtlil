@@ -35,8 +35,8 @@ module err_genvar_param_member (
     end
     assign w[i] = 1'b1;
   end
-  // Tolerated: an integer index is not a genvar by the LRM, but it is
-  // common in real RTL and other tools accept it.
+  // ILLEGAL: an integer index is not a genvar (LRM 27.4); Verilator,
+  // read_verilog, read_slang and iverilog all reject it.
   integer k;
   for (k = 0; k < 2; k++) begin : notgv
     assign v[k] = 1'b0;
