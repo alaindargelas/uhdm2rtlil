@@ -1,0 +1,2 @@
+logger -expect error "Surelog reported 0 fatal, 0 syntax and 2 other error" 1
+read_sv -nonote -noinfo -nowarning dut.sv
