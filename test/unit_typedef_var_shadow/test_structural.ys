@@ -1,0 +1,5 @@
+# x is the 4-bit $unit T, y the module's 2 x 8-bit T: o = i ^ ~i = 4'hf.
+read_uhdm slpp_all/surelog.uhdm
+hierarchy -top unit_typedef_var_shadow
+proc; flatten; opt
+sat -verify -prove wx 8'd4 -prove wy 8'd16 -prove o 4'hf

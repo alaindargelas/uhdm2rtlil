@@ -1,0 +1,5 @@
+# Surelog must accept the design: read_sv fails on any Surelog error.
+read_sv -nonote -noinfo -nowarning dut.sv
+hierarchy -top prop_bare_signal
+proc
+select -assert-count 1 t:$adff
