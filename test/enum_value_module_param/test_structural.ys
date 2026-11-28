@@ -1,0 +1,4 @@
+read_sv dut.sv
+hierarchy -top enum_value_module_param
+proc; opt
+sat -verify -prove o1 4'd3 -prove o2 4'd4 -prove o3 4'd5

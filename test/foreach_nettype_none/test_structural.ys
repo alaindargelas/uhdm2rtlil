@@ -1,0 +1,4 @@
+read_sv dut.sv
+hierarchy -top foreach_nettype_none
+proc; flatten; opt
+sat -verify -set a 4'd2 -prove y 4'd5

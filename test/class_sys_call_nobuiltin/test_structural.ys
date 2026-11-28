@@ -1,0 +1,4 @@
+read_sv dut.sv
+hierarchy -top class_sys_call_nobuiltin
+proc; opt
+sat -verify -set a 8'h0f -prove y 8'hf0

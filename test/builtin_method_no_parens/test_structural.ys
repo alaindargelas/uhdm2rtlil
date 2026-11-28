@@ -1,0 +1,4 @@
+read_sv dut.sv
+hierarchy -top builtin_method_no_parens
+proc; flatten; opt
+sat -verify -set a 4'd5 -prove o_num 32'd3 -prove o_sum 32'd8 -prove o_prod 32'd10 -prove o_size 4'd5
